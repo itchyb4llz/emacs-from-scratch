@@ -640,8 +640,8 @@ folder, otherwise delete a word"
   (setq evil-auto-indent nil)
   (diminish org-indent-mode))
 
-(global-set-key (kbd "C-c o") (lambda () (interactive) (find-file "~/org/tasks/agenda.org")))
-(global-set-key (kbd "C-c w") (lambda () (interactive) (find-file "~/org/tasks/work.org")))
+;; (global-set-key (kbd "C-c o") (lambda () (interactive) (find-file "~/org/tasks/agenda.org")))
+(global-set-key (kbd "C-c t") (lambda () (interactive) (find-file "~/org/tasks.org")))
 
 (use-package org
   :defer t
@@ -662,43 +662,53 @@ folder, otherwise delete a word"
   (setq org-log-done 'time)
   (setq org-log-into-drawer t)
   (setq org-agenda-start-on-weekday 0)
-  (setq org-agenda-files
-        (append
-        '("~/org/tasks/agenda.org"
-          "~/org/tasks/work.org")
-        (directory-files-recursively "~/org/journal/" "\\.org$")))
 
   (setq org-todo-keywords
         '((sequence "TODO(t)" "START(s)" "NEXT(n)" "|" "DONE(d!)")
           (sequence "BACKLOG(b)" "PLAN(p)" "READY(r)" "ACTIVE(a)" "REVIEW(r)" "WAIT(w@/!)" "HOLD(h)" "|" "COMPLETED(c)" "CANC(k@)")))
 
-;; Configure custom agenda views
-(setq org-agenda-custom-commands
-      '(("i" "Inbox"
-         ((tags-todo "+@task"
+  (defun jd/org-agenda-format-project (txt)
+    "Append the PROJECT property of the task to the agenda item."
+    (let ((proj (org-entry-get (get-text-property 0 'org-hd-marker txt) "PROJECT")))
+      (if proj
+          (concat txt " (" proj ")")
+        txt)))
+
+
+  (setq org-agenda-files '("~/org/tasks.org"
+                           "~/org/inbox.org"
+                           "~/org/projects.org"))
+
+  (setq org-agenda-prefix-format
+        '((todo . "  %?-12t %s")    ;; leave default formatting
+          (agenda . " %?-12t %s")))
+
+  ;; Use `org-agenda-finalize-hook` to post-process the agenda and append PROJECT
+  (add-hook 'org-agenda-finalize-hook
+            (lambda ()
+              (save-excursion
+                (goto-char (point-min))
+                (while (not (eobp))
+                  (let ((txt (thing-at-point 'line t)))
+                    (when (string-match-p "TODO" txt)
+                      (let ((proj (get-text-property (point) 'org-hd-marker)))
+                        (when proj
+                          (let ((p (org-entry-get proj "PROJECT")))
+                            (when p
+                              (beginning-of-line)
+                              (end-of-line)
+                              (insert " (" p ")")))))))
+                  (forward-line 1)))))
+
+  (setq org-agenda-custom-commands
+        '(("d" "Daily Agenda + Tasks with Project"
+           ((agenda ""
+                    ((org-agenda-span 1)
+                     (org-agenda-overriding-header "Today's Schedule")))
+            (alltodo ""
                      ((org-agenda-overriding-header "Tasks")
-                      (org-agenda-files '("~/org/tasks/agenda.org"
-                                          "~/org/tasks/work.org"
-                                          "~/org/tasks/personal.org"))))
-          (tags-todo "-{.*}"
-                     ((org-agenda-overriding-header "No Tags")
-                      (org-agenda-files '("~/org/tasks/inbox.org"
-                                          "~/org/tasks/agenda.org"
-                                          "~/org/tasks/work.org"
-                                          "~/org/tasks/personal.org"))))))
-        ("d" "Daily" 
-         ((agenda "" 
-                  ((org-agenda-span 1) 
-                   (org-agenda-files 
-                     (append 
-                       (directory-files-recursively "~/org/journal/" "\\.org$") 
-                       (directory-files-recursively "~/org/tasks/" "\\.org$")))))
-          (tags-todo "-SCHEDULED>=\"<today>\""
-                     ((org-agenda-overriding-header "Tasks")
-                      (org-agenda-files
-                        (append 
-                          (directory-files-recursively "~/org/journal/" "\\.org$")
-                          (directory-files-recursively "~/org/tasks/" "\\.org$")))))))))
+                      (org-agenda-files '("~/org/tasks.org"))))))))
+
 
 (setq org-modules
       '(org-crypt
@@ -761,15 +771,6 @@ folder, otherwise delete a word"
 (set-face-attribute 'org-column nil :background nil)
 (set-face-attribute 'org-column-title nil :background nil)
 
-;; TODO: Others to consider
-;; '(org-document-info-keyword ((t (:inherit (shadow fixed-pitch)))))
-;; '(org-meta-line ((t (:inherit (font-lock-comment-face fixed-pitch)))))
-;; '(org-property-value ((t (:inherit fixed-pitch))) t)
-;; '(org-special-keyword ((t (:inherit (font-lock-comment-face fixed-pitch)))))
-;; '(org-table ((t (:inherit fixed-pitch :foreground "#83a598"))))
-;; '(org-tag ((t (:inherit (shadow fixed-pitch) :weight bold :height 0.8))))
-;; '(org-verbatim ((t (:inherit (shadow fixed-pitch))))))
-
 ;; Block Templates
 ;; This is needed as of Org 9.2
 (require 'org-tempo)
@@ -784,7 +785,7 @@ folder, otherwise delete a word"
 ;; Searching
 (defun jd/search-org-files ()
   (interactive)
-  (counsel-rg "" "~/org" nil "Search Notes: "))
+  (counsel-rg "" "~/org" nil "Search: "))
 
 ;; Bindings
 (use-package evil-org
@@ -842,23 +843,12 @@ folder, otherwise delete a word"
 (use-package org-roam
   :straight t
   :custom
-  (org-roam-directory "~/org/archive/")
+  (org-roam-directory "~/org/notes/")
   (org-roam-completion-everywhere t)
   (org-roam-capture-templates
    '(("d" "default" plain
       "%?"
-      :if-new (file+head "${slug}.org" "#+title: ${title}\n#+author: Jaj Dollesin\n\n")
-      :unnarrowed t)
-     ("l" "programming language" plain
-      "* Get Started\n\n- Topic: %?\n- Language: \n\n"
-      :if-new (file+head "${slug}.org" "#+title: ${title}\n")
-      :unnarrowed t)
-     ("b" "book" plain
-      "\n#+author: Jaj Dollesin\n\n"
-      :if-new (file+head "${slug}.org" "#+title: ${title}\n")
-      :unnarrowed t)
-     ("p" "project" plain "* Goals\n\n%?\n\n* Tasks\n\n** TODO Add initial tasks\n\n* Dates\n\n"
-      :if-new (file+head "%<%Y%m%d%H%M%S>-${slug}.org" "#+title: ${title}\n#+filetags: Project")
+      :if-new (file+head "${slug}.org" "#+title: ${title}\n#+author: Jaj Dollesin\n#+date: %U\n\n")
       :unnarrowed t)))
   (org-roam-dailies-directory "~/org/journal/")
   (org-roam-dailies-capture-templates
