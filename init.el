@@ -136,6 +136,9 @@
 ;; Set up the visible bell
 (setq visible-bell t)
 
+;; Highlight the current line
+(global-hl-line-mode 1)
+
 ;; Improve scrolling
 (setq mouse-wheel-scroll-amount '(1 ((shift) . 1))) ;; one line at a time
 (setq mouse-wheel-progressive-speed nil) ;; don't accelerate scrolling
@@ -184,7 +187,7 @@
   ;; Global settings (defaults)
   (setq doom-themes-enable-bold t
 	      doom-themes-enable-italic t)
-  (load-theme 'doom-one t)
+  (load-theme 'doom-tokyo-night t)
 
   ;; Enable flashing mode-line on errors
   (doom-themes-visual-bell-config)
@@ -198,7 +201,7 @@
 
 
 ;; FONT -----------------------
-(defvar jd/default-font-size 100)
+(defvar jd/default-font-size 110)
 (set-face-attribute 'default nil :font "Agave Nerd Font" :weight 'medium :height jd/default-font-size)
 (set-face-attribute 'fixed-pitch nil :font "Agave Nerd Font" :weight 'medium :height jd/default-font-size)
 (set-face-attribute 'variable-pitch nil :font "Agave Nerd Font" :height jd/default-font-size)
