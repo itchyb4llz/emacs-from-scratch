@@ -640,8 +640,10 @@ folder, otherwise delete a word"
   (setq evil-auto-indent nil)
   (diminish org-indent-mode))
 
-;; (global-set-key (kbd "C-c o") (lambda () (interactive) (find-file "~/org/tasks/agenda.org")))
 (global-set-key (kbd "C-c t") (lambda () (interactive) (find-file "~/org/tasks.org")))
+(global-set-key (kbd "C-c m") (lambda () (interactive) (find-file "~/org/meetings.org")))
+(global-set-key (kbd "C-c i") (lambda () (interactive) (find-file "~/org/inbox.org")))
+(global-set-key (kbd "C-c p") (lambda () (interactive) (find-file "~/org/projects.org")))
 
 (use-package org
   :defer t
@@ -677,6 +679,7 @@ folder, otherwise delete a word"
 
   (setq org-agenda-files '("~/org/tasks.org"
                            "~/org/inbox.org"
+                           "~/org/meetings.org"
                            "~/org/projects.org"))
 
   (setq org-agenda-prefix-format
@@ -700,14 +703,23 @@ folder, otherwise delete a word"
                               (insert " (" p ")")))))))
                   (forward-line 1)))))
 
-  (setq org-agenda-custom-commands
-        '(("d" "Daily Agenda + Tasks with Project"
-           ((agenda ""
-                    ((org-agenda-span 1)
-                     (org-agenda-overriding-header "Today's Schedule")))
-            (alltodo ""
-                     ((org-agenda-overriding-header "Tasks")
-                      (org-agenda-files '("~/org/tasks.org"))))))))
+(setq org-agenda-custom-commands
+      '(("d" "Daily Agenda + Tasks with Project"
+         ((agenda ""
+                  ((org-agenda-span 1)
+                   (org-agenda-overriding-header "Today's Schedule")))
+
+          (alltodo ""
+                   ((org-agenda-overriding-header "Meetings")
+                    (org-agenda-files '("~/org/meetings.org"))))
+
+          (alltodo ""
+                   ((org-agenda-overriding-header "Tasks")
+                    (org-agenda-files '("~/org/tasks.org"))))
+
+          (alltodo ""
+                   ((org-agenda-overriding-header "Inbox")
+                    (org-agenda-files '("~/org/inbox.org"))))))))
 
 
 (setq org-modules
@@ -843,25 +855,40 @@ folder, otherwise delete a word"
 (use-package org-roam
   :straight t
   :custom
-  (org-roam-directory "~/org/notes/")
+  (org-roam-directory "~/org/")
   (org-roam-completion-everywhere t)
+
   (org-roam-capture-templates
    '(("d" "default" plain
       "%?"
-      :if-new (file+head "${slug}.org" "#+title: ${title}\n#+author: Jaj Dollesin\n#+date: %U\n\n")
+      :if-new (file+head "${slug}.org"
+                         "#+title: ${title}\n#+author: Jaj Dollesin\n#+date: %U\n\n")
+      :unnarrowed t)
+
+     ("p" "project" entry
+      "* %^{Project Name}\n:PROPERTIES:\n:CREATED: %U\n:OWNER: Jaj Dollesin\n:REPO:%^{Repository}\n:END:\n** Details\n- Domain:\n- Server:%?"
+      :target (file "projects.org")
+      :unnarrowed t)
+
+     ("i" "inbox" entry
+      "* TODO %^{Task}\t%^G\n%?"
+      :target (file "inbox.org")
       :unnarrowed t)))
+
   (org-roam-dailies-directory "~/org/journal/")
   (org-roam-dailies-capture-templates
    '(("d" "default" entry "* %<%I:%M %p>: %?"
       :if-new (file+head "%<%Y-%m-%d>.org" "#+title: %<%Y-%m-%d>\n\n"))))
+
   :bind (("C-c n l" . org-roam-buffer-toggle)
-         ("C-c n f" . org-roam-node-find)
-         ("C-c n i" . org-roam-node-insert)
-         :map org-mode-map
-         ("C-M-i" . completion-at-point)
-         :map org-roam-dailies-map
-         ("Y" . org-roam-dailies-capture-yesterday)
-         ("T" . org-roam-dailies-capture-tomorrow))
+        ("C-c n f" . org-roam-node-find)
+        ("C-c n i" . org-roam-node-insert)
+        ("C-c n c" . org-roam-capture)
+        :map org-mode-map
+        ("C-M-i" . completion-at-point)
+        :map org-roam-dailies-map
+        ("Y" . org-roam-dailies-capture-yesterday)
+        ("T" . org-roam-dailies-capture-tomorrow))
   :bind-keymap
   ("C-c n d" . org-roam-dailies-map)
   :config
