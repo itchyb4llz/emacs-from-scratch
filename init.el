@@ -852,6 +852,18 @@ folder, otherwise delete a word"
          (org-present-mode-quit . jd/org-present-quit-hook)))
 
 ;; ORG ROAM -----------------------
+(defun jd/org-get-projects ()
+  "Return a list of project names from projects.org top-level headings."
+  (let ((file "~/org/projects.org")
+        projects)
+    (when (file-exists-p file)
+      (with-current-buffer (find-file-noselect file)
+        (org-element-map (org-element-parse-buffer) 'headline
+          (lambda (hl)
+            (when (= (org-element-property :level hl) 1)
+              (push (org-element-property :raw-value hl) projects))))))
+    (reverse projects))) ;; reverse to keep original order
+
 (use-package org-roam
   :straight t
   :custom
@@ -868,6 +880,16 @@ folder, otherwise delete a word"
      ("p" "project" entry
       "* %^{Project Name}\n:PROPERTIES:\n:CREATED: %U\n:OWNER: Jaj Dollesin\n:REPO:%^{Repository}\n:END:\n** Details\n- Domain:\n- Server:%?"
       :target (file "projects.org")
+      :unnarrowed t)
+
+     ("t" "Task" entry
+      "* TODO %^{Task}\n:PROJECT: %(completing-read \"Project: \" (jd/org-get-projects))\n%^G\n%?"
+      :target (file "tasks.org")
+      :unnarrowed t)
+
+     ("m" "Meeting" entry
+      "* TODO %^{Meeting}\n:PROJECT: %^{Project}\nSCHEDULED: <%^{Date}>\n%?"
+      :target (file "meetings.org")
       :unnarrowed t)
 
      ("i" "inbox" entry
@@ -894,6 +916,19 @@ folder, otherwise delete a word"
   :config
   (require 'org-roam-dailies)
   (org-roam-db-autosync-enable))
+
+;; Enable auto-archiving on TODO -> DONE
+(setq org-archive-location "~/org/archive.org::")
+(setq org-archive-mark-done nil) ;; Do not mark again as DONE when archiving
+
+;; Automatically archive when TODO state changes to DONE
+(defun jd/org-auto-archive-done-tasks ()
+  "Move DONE tasks from tasks.org to archive.org"
+  (when (and (string= (buffer-file-name) (expand-file-name "~/org/tasks.org"))
+             (string= org-state "DONE"))
+    (org-archive-subtree)))
+
+(add-hook 'org-after-todo-state-change-hook #'jd/org-auto-archive-done-tasks)
 
 ;; LSP
 (use-package lsp-mode
