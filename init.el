@@ -16,6 +16,7 @@
 (setq native-comp-async-report-warnings-errors nil)
 
 ;; PACKAGE MANAGEMENT -----------------------
+(setq package-enable-at-startup nil)
 (defvar bootstrap-version)
 (let ((bootstrap-file
        (expand-file-name "straight/repos/straight.el/bootstrap.el" user-emacs-directory))
@@ -666,8 +667,24 @@ folder, otherwise delete a word"
   (setq org-agenda-start-on-weekday 0)
 
   (setq org-todo-keywords
-        '((sequence "TODO(t)" "START(s)" "NEXT(n)" "|" "DONE(d!)")
-          (sequence "BACKLOG(b)" "PLAN(p)" "READY(r)" "ACTIVE(a)" "REVIEW(r)" "WAIT(w@/!)" "HOLD(h)" "|" "COMPLETED(c)" "CANC(k@)")))
+        '((sequence
+           "TODO(t)"
+           "NEXT(n)"
+           "IN-PROGRESS(i)"
+           "WAIT(w@/!)"
+           "REVIEW(v)"
+           "|"
+           "DONE(d!)"
+           "CANCELLED(c@)")
+
+          (sequence
+           "BACKLOG(b)"
+           "PLANNED(p)"
+           "READY(r)"
+           "ACTIVE(a)"
+           "HOLD(h@)"
+           "|"
+           "COMPLETED(m!)")))
 
   (defun jd/org-agenda-format-project (txt)
     "Append the PROJECT property of the task to the agenda item."
@@ -677,7 +694,8 @@ folder, otherwise delete a word"
         txt)))
 
 
-  (setq org-agenda-files '("~/org/tasks.org"
+  (setq org-agenda-files '("~/org/archive.org"
+                           "~/org/tasks.org"
                            "~/org/inbox.org"
                            "~/org/meetings.org"
                            "~/org/projects.org"))
@@ -883,8 +901,10 @@ folder, otherwise delete a word"
       :unnarrowed t)
 
      ("t" "Task" entry
-      "* TODO %^{Task}\n:PROJECT: %(completing-read \"Project: \" (jd/org-get-projects))\n%^G\n%?"
+      "* TODO %^{Task}\n:PROJECT: %(completing-read \"Project: \" (jd/org-get-projects))\n%^G%?"
       :target (file "tasks.org")
+      :prepend t
+      :empty-lines 1
       :unnarrowed t)
 
      ("m" "Meeting" entry
@@ -938,6 +958,39 @@ folder, otherwise delete a word"
   :commands lsp)
 
 (use-package lsp-ui :commands lsp-ui-mode)
+
+;; LSP for web development
+(use-package eglot
+  :hook ((typescript-ts-mode
+          tsx-ts-mode
+          js-ts-mode
+          css-mode
+          html-mode) . eglot-ensure))
+
+;; Treesitter
+(setq treesit-language-source-alist
+      '((typescript "https://github.com/tree-sitter/tree-sitter-typescript" "master" "typescript/src")
+        (tsx        "https://github.com/tree-sitter/tree-sitter-typescript" "master" "tsx/src")
+        (javascript "https://github.com/tree-sitter/tree-sitter-javascript" "master" "src")
+        (json       "https://github.com/tree-sitter/tree-sitter-json" "master" "src")
+        (css        "https://github.com/tree-sitter/tree-sitter-css" "master" "src")
+        (html       "https://github.com/tree-sitter/tree-sitter-html" "master" "src")))
+
+(setq major-mode-remap-alist
+      '((typescript-mode . typescript-ts-mode)
+        (js-mode         . js-ts-mode)
+        (js2-mode        . js-ts-mode)
+        (css-mode        . css-ts-mode)
+        (json-mode       . json-ts-mode)))
+
+(add-to-list 'auto-mode-alist '("\\.tsx\\'" . tsx-ts-mode))
+(add-to-list 'auto-mode-alist '("\\.ts\\'"  . typescript-ts-mode))
+(add-to-list 'auto-mode-alist '("\\.js\\'"  . js-ts-mode))
+
+
+;; Prettier
+(use-package prettier
+  :hook ((js-ts-mode tsx-ts-mode typescript-ts-mode) . prettier-mode))
 
 ;; Deft
 (use-package deft
