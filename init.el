@@ -162,6 +162,7 @@
 
 ;; Enable line numbers and customize their format
 (column-number-mode)
+(setq display-line-numbers-type 'relative)
 
 ;; Enable line numbers for some modes
 (dolist (mode '(text-mode-hook
@@ -195,17 +196,17 @@
   ;; Enable custom neotree theme (all-the-icons must be installed!)
   (doom-themes-neotree-config)
   ;; or for treemacs users
-  (setq doom-themes-treemacs-theme "doom-one") ; use "doom-colors" for less minimal icon theme
+  (setq doom-themes-treemacs-theme "doom-tokyonight") ; use "doom-colors" for less minimal icon theme
   (doom-themes-treemacs-config)
   ;; Corrects (and improves) org-mode's native fontification
   (doom-themes-org-config))
 
 
 ;; FONT -----------------------
-(defvar jd/default-font-size 110)
-(set-face-attribute 'default nil :font "Agave Nerd Font" :weight 'medium :height jd/default-font-size)
-(set-face-attribute 'fixed-pitch nil :font "Agave Nerd Font" :weight 'medium :height jd/default-font-size)
-(set-face-attribute 'variable-pitch nil :font "Agave Nerd Font" :height jd/default-font-size)
+(defvar jd/default-font-size 90)
+(set-face-attribute 'default nil :font "JetBrains Mono Nerd Font" :weight 'medium :height jd/default-font-size)
+(set-face-attribute 'fixed-pitch nil :font "JetBrains Mono Nerd Font" :weight 'medium :height jd/default-font-size)
+(set-face-attribute 'variable-pitch nil :font "JetBrains Mono Nerd Font" :height jd/default-font-size)
 
 ;; Emojis in buffers
 (use-package emojify
@@ -286,7 +287,9 @@
   "ot"  '(vterm :which-key "launch vterm")
   "ou"  '(org-roam-db-sync :which-key "org-roam db sync")
   "oa"  '(org-agenda :which-key "org agenda")
-  
+
+  "x"   '(org-capture :which-key "org capture")
+
   "t" '(:ignore t :which-key "toggles")
   "tw" 'whitespace-mode
   "tt" '(counsel-load-theme :which-key "choose theme"))
@@ -641,10 +644,7 @@ folder, otherwise delete a word"
   (setq evil-auto-indent nil)
   (diminish org-indent-mode))
 
-(global-set-key (kbd "C-c t") (lambda () (interactive) (find-file "~/org/tasks.org")))
-(global-set-key (kbd "C-c m") (lambda () (interactive) (find-file "~/org/meetings.org")))
-(global-set-key (kbd "C-c i") (lambda () (interactive) (find-file "~/org/inbox.org")))
-(global-set-key (kbd "C-c p") (lambda () (interactive) (find-file "~/org/projects.org")))
+;; (global-set-key (kbd "C-c t") (lambda () (interactive) (find-file "~/org/tasks.org")))
 
 (use-package org
   :defer t
@@ -659,7 +659,7 @@ folder, otherwise delete a word"
         org-edit-src-content-indentation 2
         org-hide-block-startup nil
         org-src-preserve-indentation nil
-        org-startup-folded 'overview
+        org-startup-folded 'show3levels
         org-cycle-separator-lines 2)
   (setq org-agenda-start-with-log-mode t)
   (setq org-log-done 'time)
@@ -686,6 +686,22 @@ folder, otherwise delete a word"
            "|"
            "COMPLETED(m!)")))
 
+  ;; Colors for the TODO keywords above (Tokyo Night palette)
+  (setq org-todo-keyword-faces
+        '(("TODO"        . (:foreground "#f7768e" :weight bold))
+          ("NEXT"        . (:foreground "#7aa2f7" :weight bold))
+          ("IN-PROGRESS" . (:foreground "#e0af68" :weight bold))
+          ("WAIT"        . (:foreground "#bb9af7" :weight bold))
+          ("REVIEW"      . (:foreground "#2ac3de" :weight bold))
+          ("DONE"        . (:foreground "#9ece6a" :weight bold))
+          ("CANCELLED"   . (:foreground "#565f89" :weight bold :strike-through t))
+          ("BACKLOG"     . (:foreground "#565f89" :weight bold))
+          ("PLANNED"     . (:foreground "#7dcfff" :weight bold))
+          ("READY"       . (:foreground "#e0af68" :weight bold))
+          ("ACTIVE"      . (:foreground "#7aa2f7" :weight bold))
+          ("HOLD"        . (:foreground "#bb9af7" :weight bold))
+          ("COMPLETED"   . (:foreground "#9ece6a" :weight bold))))
+
   (defun jd/org-agenda-format-project (txt)
     "Append the PROJECT property of the task to the agenda item."
     (let ((proj (org-entry-get (get-text-property 0 'org-hd-marker txt) "PROJECT")))
@@ -693,75 +709,121 @@ folder, otherwise delete a word"
           (concat txt " (" proj ")")
         txt)))
 
-
-  (setq org-agenda-files '("~/org/archive.org"
-                           "~/org/tasks.org"
-                           "~/org/inbox.org"
-                           "~/org/meetings.org"
-                           "~/org/projects.org"))
+  (setq org-directory "~/org/")
+  (setq org-agenda-files
+        (append
+         (mapcar (lambda (f) (concat org-directory f))
+                 '("bills.org" "calendar.org" "clients.org" "inbox.org"
+                   "meetings.org" "notes.org" "projects.org" "tasks.org"))))
 
   (setq org-agenda-prefix-format
         '((todo . "  %?-12t %s")    ;; leave default formatting
           (agenda . " %?-12t %s")))
 
-  ;; Use `org-agenda-finalize-hook` to post-process the agenda and append PROJECT
-  (add-hook 'org-agenda-finalize-hook
-            (lambda ()
-              (save-excursion
-                (goto-char (point-min))
-                (while (not (eobp))
-                  (let ((txt (thing-at-point 'line t)))
-                    (when (string-match-p "TODO" txt)
-                      (let ((proj (get-text-property (point) 'org-hd-marker)))
-                        (when proj
-                          (let ((p (org-entry-get proj "PROJECT")))
-                            (when p
-                              (beginning-of-line)
-                              (end-of-line)
-                              (insert " (" p ")")))))))
-                  (forward-line 1)))))
+  (setq org-agenda-custom-commands
+        '(
+          ("d" "Dashboard"
+           ((agenda ""
+                    ((org-agenda-span 7)
+                     (org-agenda-sorting-strategy
+                      '(deadline-up priority-down time-up))
+                     (org-deadline-warning-days 2)
+                     (org-agenda-overriding-header
+                      "Deadlines & Scheduled\n")))
+            (todo "NEXT|IN-PROGRESS"
+                  ((org-agenda-overriding-header
+                    "\nIN FLIGHT — Next & In Progress\n")
+                   (org-agenda-sorting-strategy '(priority-down deadline-up))))
+            (todo "TODO"
+                  ((org-agenda-skip-function
+                    '(org-agenda-skip-entry-if 'scheduled 'deadline))
+                   (org-agenda-sorting-strategy '(priority-down effort-up))
+                   (org-agenda-max-entries 8)
+                   (org-agenda-overriding-header
+                    "\nUNSCHEDULED — Priority Pool (top 8)\n")))
+            (todo "WAIT"
+                  ((org-agenda-overriding-header
+                    "\nWAITING ON SOMEONE\n")))
+            (todo "REVIEW"
+                  ((org-agenda-overriding-header
+                    "\nNEEDS REVIEW\n")))))
 
-(setq org-agenda-custom-commands
-      '(("d" "Daily Agenda + Tasks with Project"
-         ((agenda ""
-                  ((org-agenda-span 1)
-                   (org-agenda-overriding-header "Today's Schedule")))
+          ("o" "Overdue & At Risk"
+           ((agenda ""
+                    ((org-agenda-span 1)
+                     (org-agenda-use-time-grid nil)
+                     (org-agenda-entry-types '(:deadline :scheduled))
+                     (org-deadline-warning-days 3)
+                     (org-agenda-sorting-strategy '(deadline-up priority-down))
+                     (org-agenda-overriding-header
+                      "OVERDUE + DUE IN 3 DAYS\n")))))
 
-          (alltodo ""
-                   ((org-agenda-overriding-header "Meetings")
-                    (org-agenda-files '("~/org/meetings.org"))))
+          ("w" "Week Ahead"
+           ((agenda ""
+                    ((org-agenda-span 7)
+                     (org-agenda-sorting-strategy '(deadline-up priority-down))
+                     (org-agenda-overriding-header
+                      "NEXT 7 DAYS\n")))
+            (todo "NEXT"
+                  ((org-agenda-overriding-header
+                    "\nNEXT Actions across all projects\n")))))))
 
-          (alltodo ""
-                   ((org-agenda-overriding-header "Tasks")
-                    (org-agenda-files '("~/org/tasks.org"))))
+  (setq org-modules
+        '(org-crypt
+          org-habit
+          org-bookmark))
 
-          (alltodo ""
-                   ((org-agenda-overriding-header "Inbox")
-                    (org-agenda-files '("~/org/inbox.org"))))))))
+  (setq org-refile-targets '((nil :maxlevel . 3)
+                             (org-agenda-files :maxlevel . 3)))
 
+  (setq org-refile-use-outline-path 'file)
+  (setq org-refile-allow-creating-parent-nodes 'confirm)
+  (setq org-outline-path-complete-in-steps nil)
 
-(setq org-modules
-      '(org-crypt
-        org-habit
-        org-bookmark))
+  (setq org-capture-templates
+        '(
+          ("i" "Inbox" entry
+           (file "~/org/inbox.org")
+           "* TODO %?\n  Captured: %U\n  %a"
+           :empty-lines 1)
 
-(setq org-refile-targets '((nil :maxlevel . 1)
-                           (org-agenda-files :maxlevel . 1)))
+          ("c" "Client" entry
+           (file "~/org/clients.org")
+           "* %^{Client}\n** Active Tasks\n** Bugs\n** Feature Requests\n** Waiting/Blocked\n** Invoices & Billing\n** Done/Archive\n")
 
-(setq org-outline-path-complete-in-steps nil)
-(setq org-refile-use-outline-path t)
+          ("n" "Notes" entry
+           (file+headline "~/org/notes.org" "Inbox")
+           "* [%<%Y-%m-%d %a>] %^{Title}\n:PROPERTIES:\n:CREATED: %U\n:END:\n%?"
+           :empty-lines 1)
 
-(evil-define-key '(normal insert visual) org-mode-map (kbd "C-j") 'org-next-visible-heading)
-(evil-define-key '(normal insert visual) org-mode-map (kbd "C-k") 'org-previous-visible-heading)
+          ("b" "Bills" entry
+           (file "~/org/bills.org")
+           "* TODO %^{New Bill}\nDEADLINE: %^{DEADLINE}T\n:PROPERTIES:\n:CREATED: %U\n:END:\n%?")
 
-(evil-define-key '(normal insert visual) org-mode-map (kbd "M-j") 'org-metadown)
-(evil-define-key '(normal insert visual) org-mode-map (kbd "M-k") 'org-metaup)
+          ("e" "Event" entry
+           (file+headline "~/org/calendar.org" "Events")
+           "* %^{Event}\nSCHEDULED: %^{SCHEDULED}T\n:PROPERTIES:\n:CREATED: %U\n:CONTACT:\n:END:\n%?")
 
-(org-babel-do-load-languages
- 'org-babel-load-languages
- '((emacs-lisp . t)))
+          ("d" "Deadline" entry
+           (file+headline "~/org/calendar.org" "Deadlines")
+           "* TODO %^{Task}\nDEADLINE: %^{Deadline}T\n:PROPERTIES:\n:CREATED: %U\n:END:\n%?")
 
-(push '("conf-unix" . conf-unix) org-src-lang-modes)
+          ("m" "Meeting" entry
+           "* TODO %^{Meeting}\nSCHEDULED: <%^{Date}>\n%?"
+           :target (file "meetings.org")
+           :unnarrowed t)))
+
+  (evil-define-key '(normal insert visual) org-mode-map (kbd "C-j") 'org-next-visible-heading)
+  (evil-define-key '(normal insert visual) org-mode-map (kbd "C-k") 'org-previous-visible-heading)
+
+  (evil-define-key '(normal insert visual) org-mode-map (kbd "M-j") 'org-metadown)
+  (evil-define-key '(normal insert visual) org-mode-map (kbd "M-k") 'org-metaup)
+
+  (org-babel-do-load-languages
+   'org-babel-load-languages
+   '((emacs-lisp . t)))
+
+  (push '("conf-unix" . conf-unix) org-src-lang-modes)
 
 ;; Fonts and Bullets
 ;; (use-package org-superstar
@@ -772,63 +834,68 @@ folder, otherwise delete a word"
 ;;   (org-superstar-headline-bullets-list '("◉" "○" "●" "○" "●" "○" "●")))
 
 ;; Increase the size of various headings
-(set-face-attribute 'org-document-title nil :font "Agave Nerd Font" :weight 'bold :height 1.0)
-(dolist (face '((org-level-1 . 1.0)
-                (org-level-2 . 1.0)
-                (org-level-3 . 1.0)
-                (org-level-4 . 1.0)
-                (org-level-5 . 1.0)
-                (org-level-6 . 1.0)
-                (org-level-7 . 1.0)
-                (org-level-8 . 1.0)))
-  (set-face-attribute (car face) nil :font "Agave Nerd Font" :weight 'medium :height (cdr face)))
+  (set-face-attribute 'org-document-title nil :font "JetBrains Mono Nerd Font" :weight 'bold :height 1.0)
+  (dolist (face '((org-level-1 . 1.0)
+                  (org-level-2 . 1.0)
+                  (org-level-3 . 1.0)
+                  (org-level-4 . 1.0)
+                  (org-level-5 . 1.0)
+                  (org-level-6 . 1.0)
+                  (org-level-7 . 1.0)
+                  (org-level-8 . 1.0)))
+    (set-face-attribute (car face) nil :font "JetBrains Mono Nerd Font" :weight 'medium :height (cdr face)))
 
-;; Make sure org-indent face is available
-(require 'org-indent)
+  ;; Make sure org-indent face is available
+  (require 'org-indent)
 
-;; Ensure that anything that should be fixed-pitch in Org files appears that way
-(set-face-attribute 'org-block nil :foreground nil :inherit 'fixed-pitch)
-(set-face-attribute 'org-table nil  :inherit 'fixed-pitch)
-(set-face-attribute 'org-formula nil  :inherit 'fixed-pitch)
-(set-face-attribute 'org-code nil   :inherit '(shadow fixed-pitch))
-(set-face-attribute 'org-indent nil :inherit '(org-hide fixed-pitch))
-(set-face-attribute 'org-verbatim nil :inherit '(shadow fixed-pitch))
-(set-face-attribute 'org-special-keyword nil :inherit '(font-lock-comment-face fixed-pitch))
-(set-face-attribute 'org-meta-line nil :inherit '(font-lock-comment-face fixed-pitch))
-(set-face-attribute 'org-checkbox nil :inherit 'fixed-pitch)
+  ;; Ensure that anything that should be fixed-pitch in Org files appears that way
+  (set-face-attribute 'org-block nil :foreground nil :inherit 'fixed-pitch)
+  (set-face-attribute 'org-table nil  :inherit 'fixed-pitch)
+  (set-face-attribute 'org-formula nil  :inherit 'fixed-pitch)
+  (set-face-attribute 'org-code nil   :inherit '(shadow fixed-pitch))
+  (set-face-attribute 'org-indent nil :inherit '(org-hide fixed-pitch))
+  (set-face-attribute 'org-verbatim nil :inherit '(shadow fixed-pitch))
+  (set-face-attribute 'org-special-keyword nil :inherit '(font-lock-comment-face fixed-pitch))
+  (set-face-attribute 'org-meta-line nil :inherit '(font-lock-comment-face fixed-pitch))
+  (set-face-attribute 'org-checkbox nil :inherit 'fixed-pitch)
 
-;; Get rid of the background on column views
-(set-face-attribute 'org-column nil :background nil)
-(set-face-attribute 'org-column-title nil :background nil)
+  ;; Get rid of the background on column views
+  (set-face-attribute 'org-column nil :background nil)
+  (set-face-attribute 'org-column-title nil :background nil)
 
-;; Block Templates
-;; This is needed as of Org 9.2
-(require 'org-tempo)
+  ;; Block Templates
+  ;; This is needed as of Org 9.2
+  (require 'org-tempo)
+  (add-to-list 'org-structure-template-alist '("src" . "src"))
 
-(add-to-list 'org-structure-template-alist '("src" . "src"))
-(add-to-list 'org-structure-template-alist '("sh" . "src sh"))
-(add-to-list 'org-structure-template-alist '("el" . "src emacs-lisp"))
-(add-to-list 'org-structure-template-alist '("ts" . "src typescript"))
-(add-to-list 'org-structure-template-alist '("py" . "src python"))
-(add-to-list 'org-structure-template-alist '("json" . "src json"))
+  ;; Searching
+  (defun jd/search-org-files ()
+    (interactive)
+    (counsel-rg "" "~/org" nil "Search: "))
 
-;; Searching
-(defun jd/search-org-files ()
-  (interactive)
-  (counsel-rg "" "~/org" nil "Search: "))
+  ;; Bindings
+  (use-package evil-org
+    :after org
+    :hook ((org-mode . evil-org-mode)
+           (org-agenda-mode . evil-org-mode)
+           (evil-org-mode . (lambda () (evil-org-set-key-theme '(navigation todo insert textobjects additional)))))
+    :config
+    (require 'evil-org-agenda)
+    (evil-org-agenda-set-keys)))
 
-;; Bindings
-(use-package evil-org
+;; PRETTY ORG (like Doom Emacs' org +pretty) -----------------------
+(use-package org-modern
+  :straight t
   :after org
-  :hook ((org-mode . evil-org-mode)
-         (org-agenda-mode . evil-org-mode)
-         (evil-org-mode . (lambda () (evil-org-set-key-theme '(navigation todo insert textobjects additional)))))
-  :config
-  (require 'evil-org-agenda)
-  (evil-org-agenda-set-keys)))
+  :hook ((org-mode . org-modern-mode)
+         (org-agenda-finalize . org-modern-agenda))
+  :custom
+  ;; Headers/stars stay exactly as-is (visible by default) -- don't hide or replace them
+  (org-modern-star nil)
+  (org-modern-hide-stars nil)
+  (org-modern-todo-faces org-todo-keyword-faces))
 
 ;; PRESENTATIONS -----------------------
-
 ;; org-present
 (defun jd/org-present-prepare-slide ()
   (org-overview)
@@ -870,18 +937,6 @@ folder, otherwise delete a word"
          (org-present-mode-quit . jd/org-present-quit-hook)))
 
 ;; ORG ROAM -----------------------
-(defun jd/org-get-projects ()
-  "Return a list of project names from projects.org top-level headings."
-  (let ((file "~/org/projects.org")
-        projects)
-    (when (file-exists-p file)
-      (with-current-buffer (find-file-noselect file)
-        (org-element-map (org-element-parse-buffer) 'headline
-          (lambda (hl)
-            (when (= (org-element-property :level hl) 1)
-              (push (org-element-property :raw-value hl) projects))))))
-    (reverse projects))) ;; reverse to keep original order
-
 (use-package org-roam
   :straight t
   :custom
@@ -889,38 +944,53 @@ folder, otherwise delete a word"
   (org-roam-completion-everywhere t)
 
   (org-roam-capture-templates
-   '(("d" "default" plain
+   '(
+     ("d" "Default" plain
       "%?"
-      :if-new (file+head "${slug}.org"
-                         "#+title: ${title}\n#+author: Jaj Dollesin\n#+date: %U\n\n")
+      :if-new (file+head "notes/${slug}.org"
+                         "#+title: ${title}\n#+date: %U\n\n")
       :unnarrowed t)
 
-     ("p" "project" entry
-      "* %^{Project Name}\n:PROPERTIES:\n:CREATED: %U\n:OWNER: Jaj Dollesin\n:REPO:%^{Repository}\n:END:\n** Details\n- Domain:\n- Server:%?"
-      :target (file "projects.org")
-      :unnarrowed t)
-
-     ("t" "Task" entry
-      "* TODO %^{Task}\n:PROJECT: %(completing-read \"Project: \" (jd/org-get-projects))\n%^G%?"
-      :target (file "tasks.org")
-      :prepend t
-      :empty-lines 1
-      :unnarrowed t)
-
-     ("m" "Meeting" entry
-      "* TODO %^{Meeting}\n:PROJECT: %^{Project}\nSCHEDULED: <%^{Date}>\n%?"
-      :target (file "meetings.org")
-      :unnarrowed t)
-
-     ("i" "inbox" entry
+     ("i" "Inbox" entry
       "* TODO %^{Task}\t%^G\n%?"
       :target (file "inbox.org")
       :unnarrowed t)))
 
   (org-roam-dailies-directory "~/org/journal/")
   (org-roam-dailies-capture-templates
-   '(("d" "default" entry "* %<%I:%M %p>: %?"
-      :if-new (file+head "%<%Y-%m-%d>.org" "#+title: %<%Y-%m-%d>\n\n"))))
+   '(("d" "default" entry
+      "* %<%I:%M %p>\n%?"
+      :target
+      (file+head+olp
+       "%<%Y-%m-%d>.org"
+       "#+title: %<%Y-%m-%d>
+
+* Metrics
+** Sleep Quality
+- Time to Bed (last night):
+- Wake Time:
+
+** Meals
+- [ ] Breakfast:
+- [ ] Lunch:
+- [ ] Dinner:
+- Snacks:
+  -
+* Morning Foundation
+** TODO Morning Prayer and Scripture
+** TODO Shower, Groom, and Dressed
+** TODO Review Day's Battle Plan
+** TODO System Update
+** TODO Check Reports: issues/bugs/emails/msg/missed calls
+
+* Today's Focus
+- Main project:
+- Secondary task:
+- If I only finish one thing today, it will be:
+
+* Journal
+"
+       ("Journal")))))
 
   :bind (("C-c n l" . org-roam-buffer-toggle)
         ("C-c n f" . org-roam-node-find)
@@ -938,70 +1008,19 @@ folder, otherwise delete a word"
   (org-roam-db-autosync-enable))
 
 ;; Enable auto-archiving on TODO -> DONE
-(setq org-archive-location "~/org/archive.org::")
-(setq org-archive-mark-done nil) ;; Do not mark again as DONE when archiving
+;; (setq org-archive-location "~/org/archive.org::")
+;; (setq org-archive-mark-done nil) ;; Do not mark again as DONE when archiving
 
 ;; Automatically archive when TODO state changes to DONE
-(defun jd/org-auto-archive-done-tasks ()
-  "Move DONE tasks from tasks.org to archive.org"
-  (when (and (string= (buffer-file-name) (expand-file-name "~/org/tasks.org"))
-             (string= org-state "DONE"))
-    (org-archive-subtree)))
+;; (defun jd/org-auto-archive-done-tasks ()
+;;   "Move DONE tasks from tasks.org to archive.org"
+;;   (when (and (string= (buffer-file-name) (expand-file-name "~/org/tasks.org"))
+;;              (string= org-state "DONE"))
+;;     (org-archive-subtree)))
 
-(add-hook 'org-after-todo-state-change-hook #'jd/org-auto-archive-done-tasks)
+;; (add-hook 'org-after-todo-state-change-hook #'jd/org-auto-archive-done-tasks)
 
-;; LSP
-(use-package lsp-mode
-  :init
-  (setq lsp-keymap-prefix "C-c l")
-  :hook ((lsp-mode . lsp-enable-which-key-integration))
-  :commands lsp)
-
-(use-package lsp-ui :commands lsp-ui-mode)
-
-;; LSP for web development
-(use-package eglot
-  :hook ((typescript-ts-mode
-          tsx-ts-mode
-          js-ts-mode
-          css-mode
-          html-mode) . eglot-ensure))
-
-;; Treesitter
-(setq treesit-language-source-alist
-      '((typescript "https://github.com/tree-sitter/tree-sitter-typescript" "master" "typescript/src")
-        (tsx        "https://github.com/tree-sitter/tree-sitter-typescript" "master" "tsx/src")
-        (javascript "https://github.com/tree-sitter/tree-sitter-javascript" "master" "src")
-        (json       "https://github.com/tree-sitter/tree-sitter-json" "master" "src")
-        (css        "https://github.com/tree-sitter/tree-sitter-css" "master" "src")
-        (html       "https://github.com/tree-sitter/tree-sitter-html" "master" "src")))
-
-(setq major-mode-remap-alist
-      '((typescript-mode . typescript-ts-mode)
-        (js-mode         . js-ts-mode)
-        (js2-mode        . js-ts-mode)
-        (css-mode        . css-ts-mode)
-        (json-mode       . json-ts-mode)))
-
-(add-to-list 'auto-mode-alist '("\\.tsx\\'" . tsx-ts-mode))
-(add-to-list 'auto-mode-alist '("\\.ts\\'"  . typescript-ts-mode))
-(add-to-list 'auto-mode-alist '("\\.js\\'"  . js-ts-mode))
-
-
-;; Prettier
-(use-package prettier
-  :hook ((js-ts-mode tsx-ts-mode typescript-ts-mode) . prettier-mode))
-
-;; Deft
-(use-package deft
-  :commands (deft)
-  :config (setq deft-directory "~/org"
-                deft-recursive t
-                deft-extensions '("md" "org")))
-
-(use-package org-appear
-  :hook (org-mode . org-appear-mode))
-
+;; DEVELOPMENT -----------------------
 ;; Git
 ;; Magit
 (use-package magit
@@ -1010,33 +1029,9 @@ folder, otherwise delete a word"
   :custom
   (magit-display-buffer-function #'magit-display-buffer-same-window-except-diff-v1))
 
-;; Flycheck
-(use-package flycheck
-  :defer t
-  :hook (lsp-mode . flycheck-mode))
-
-;; Snippets
-(use-package yasnippet
-  :hook (prog-mode . yas-minor-mode)
-  :config
-  (yas-reload-all))
-
 ;; Smart Parens
 (use-package smartparens
   :hook (prog-mode . smartparens-mode))
-
-;; Rainbow Delimiters
-(use-package rainbow-delimiters
-  :hook (prog-mode . rainbow-delimiters-mode))
-
-;; Rainbow Mode
-(use-package rainbow-mode
-  :defer t
-  :hook (org-mode
-         emacs-lisp-mode
-         web-mode
-         typescript-mode
-         js2-mode))
 
 ;; TERMINAL -----------------------
 ;; vterm
