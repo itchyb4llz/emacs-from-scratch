@@ -1116,16 +1116,7 @@ Like a popup terminal buffer instead of vterm taking over the whole view."
   (lsp-completion-provider :none)
   (lsp-diagnostics-provider :flycheck)
   (lsp-eslint-package-manager "pnpm")
-  :config
-  ;; lsp-mode's built-in language-id table already covers the -ts-mode
-  ;; variants as of this vendored version, but these entries are added
-  ;; explicitly so client activation doesn't silently regress on upgrade.
-  (add-to-list 'lsp-language-id-configuration '(typescript-ts-mode . "typescript"))
-  (add-to-list 'lsp-language-id-configuration '(tsx-ts-mode . "typescriptreact"))
-  (add-to-list 'lsp-language-id-configuration '(js-ts-mode . "javascript"))
-  (add-to-list 'lsp-language-id-configuration '(css-ts-mode . "css"))
-  (add-to-list 'lsp-language-id-configuration '(json-ts-mode . "json"))
-
+  :init
   (jd/leader-keys
     "cf" '(apheleia-format-buffer :which-key "format buffer")
     "ca" '(lsp-execute-code-action :which-key "code action")
@@ -1137,7 +1128,16 @@ Like a popup terminal buffer instead of vterm taking over the whole view."
     "l"  '(:ignore t :which-key "lsp")
     "li" '(lsp-inlay-hints-mode :which-key "toggle inlay hints")
     "lr" '(lsp-workspace-restart :which-key "restart lsp")
-    "ls" '(lsp-ui-doc-glance :which-key "lsp doc")))
+    "ls" '(lsp-ui-doc-glance :which-key "lsp doc"))
+  :config
+  ;; lsp-mode's built-in language-id table already covers the -ts-mode
+  ;; variants as of this vendored version, but these entries are added
+  ;; explicitly so client activation doesn't silently regress on upgrade.
+  (add-to-list 'lsp-language-id-configuration '(typescript-ts-mode . "typescript"))
+  (add-to-list 'lsp-language-id-configuration '(tsx-ts-mode . "typescriptreact"))
+  (add-to-list 'lsp-language-id-configuration '(js-ts-mode . "javascript"))
+  (add-to-list 'lsp-language-id-configuration '(css-ts-mode . "css"))
+  (add-to-list 'lsp-language-id-configuration '(json-ts-mode . "json")))
 
 (use-package lsp-ui
   :straight t
