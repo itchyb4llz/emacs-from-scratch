@@ -1159,4 +1159,15 @@ Like a popup terminal buffer instead of vterm taking over the whole view."
     (setf (alist-get mode apheleia-mode-alist) '(prettier)))
   (apheleia-global-mode 1))
 
+;; SNIPPETS -----------------------
+(use-package yasnippet
+  :straight t
+  :hook (prog-mode . yas-minor-mode)
+  :config
+  (yas-reload-all))
+
+(use-package yasnippet-snippets
+  :straight t
+  :after yasnippet)
+
 ;;; init.el ends here
