@@ -1095,4 +1095,57 @@ Like a popup terminal buffer instead of vterm taking over the whole view."
     "ps" '(consult-ripgrep :which-key "search in project")
     "pk" '(project-kill-buffers :which-key "kill project buffers")))
 
+;; LSP -----------------------
+(use-package flycheck
+  :straight t
+  :init (global-flycheck-mode))
+
+(defun jd/lsp-deferred ()
+  (lsp-deferred))
+
+(use-package lsp-mode
+  :straight t
+  :commands (lsp lsp-deferred)
+  :hook ((typescript-ts-mode . jd/lsp-deferred)
+         (tsx-ts-mode . jd/lsp-deferred)
+         (js-ts-mode . jd/lsp-deferred)
+         (css-ts-mode . jd/lsp-deferred)
+         (json-ts-mode . jd/lsp-deferred))
+  :custom
+  ;; Let corfu drive completion-at-point instead of pulling in company.
+  (lsp-completion-provider :none)
+  (lsp-diagnostics-provider :flycheck)
+  (lsp-eslint-package-manager "pnpm")
+  :config
+  ;; lsp-mode's built-in language-id table already covers the -ts-mode
+  ;; variants as of this vendored version, but these entries are added
+  ;; explicitly so client activation doesn't silently regress on upgrade.
+  (add-to-list 'lsp-language-id-configuration '(typescript-ts-mode . "typescript"))
+  (add-to-list 'lsp-language-id-configuration '(tsx-ts-mode . "typescriptreact"))
+  (add-to-list 'lsp-language-id-configuration '(js-ts-mode . "javascript"))
+  (add-to-list 'lsp-language-id-configuration '(css-ts-mode . "css"))
+  (add-to-list 'lsp-language-id-configuration '(json-ts-mode . "json"))
+
+  (jd/leader-keys
+    "cf" '(apheleia-format-buffer :which-key "format buffer")
+    "ca" '(lsp-execute-code-action :which-key "code action")
+    "cr" '(lsp-rename :which-key "rename symbol")
+    "cd" '(lsp-find-definition :which-key "go to definition")
+    "ce" '(flycheck-next-error :which-key "next error")
+    "cE" '(flycheck-previous-error :which-key "previous error")
+
+    "l"  '(:ignore t :which-key "lsp")
+    "li" '(lsp-inlay-hints-mode :which-key "toggle inlay hints")
+    "lr" '(lsp-workspace-restart :which-key "restart lsp")
+    "ls" '(lsp-ui-doc-glance :which-key "lsp doc")))
+
+(use-package lsp-ui
+  :straight t
+  :commands lsp-ui-mode
+  :after lsp-mode
+  :hook (lsp-mode . lsp-ui-mode)
+  :custom
+  (lsp-ui-sideline-enable t)
+  (lsp-ui-doc-enable t))
+
 ;;; init.el ends here
