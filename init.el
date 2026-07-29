@@ -689,23 +689,23 @@ folder, otherwise delete a word"
   ;; Colors for the TODO keywords above (Tokyo Night palette)
   ;; Solid background + dark text so org-modern's keyword "badge" is filled in,
   ;; not just an empty box outline. :distant-foreground kicks in when an
-  ;; overlay (global-hl-line-mode, region, etc.) covers the badge with a dark
-  ;; background of its own -- without it, our dark text blends into that
-  ;; overlay and looks like the badge colors vanished under the cursor line.
+  ;; overlay (global-hl-line-mode, region, etc.) covers the badge with its own
+  ;; background -- set to the theme's normal foreground so a hovered/current
+  ;; line just reads as plain text instead of a distracting colored badge.
   (setq org-todo-keyword-faces
-        '(("TODO"        . (:background "#f7768e" :foreground "#1a1b26" :distant-foreground "#f7768e" :weight bold))
-          ("NEXT"        . (:background "#7aa2f7" :foreground "#1a1b26" :distant-foreground "#7aa2f7" :weight bold))
-          ("IN-PROGRESS" . (:background "#e0af68" :foreground "#1a1b26" :distant-foreground "#e0af68" :weight bold))
-          ("WAIT"        . (:background "#bb9af7" :foreground "#1a1b26" :distant-foreground "#bb9af7" :weight bold))
-          ("REVIEW"      . (:background "#2ac3de" :foreground "#1a1b26" :distant-foreground "#2ac3de" :weight bold))
-          ("DONE"        . (:background "#9ece6a" :foreground "#1a1b26" :distant-foreground "#9ece6a" :weight bold))
+        '(("TODO"        . (:background "#f7768e" :foreground "#1a1b26" :distant-foreground "#c0caf5" :weight bold))
+          ("NEXT"        . (:background "#7aa2f7" :foreground "#1a1b26" :distant-foreground "#c0caf5" :weight bold))
+          ("IN-PROGRESS" . (:background "#e0af68" :foreground "#1a1b26" :distant-foreground "#c0caf5" :weight bold))
+          ("WAIT"        . (:background "#bb9af7" :foreground "#1a1b26" :distant-foreground "#c0caf5" :weight bold))
+          ("REVIEW"      . (:background "#2ac3de" :foreground "#1a1b26" :distant-foreground "#c0caf5" :weight bold))
+          ("DONE"        . (:background "#9ece6a" :foreground "#1a1b26" :distant-foreground "#c0caf5" :weight bold))
           ("CANCELLED"   . (:background "#414868" :foreground "#565f89" :distant-foreground "#c0caf5" :weight bold :strike-through t))
           ("BACKLOG"     . (:background "#414868" :foreground "#c0caf5" :distant-foreground "#c0caf5" :weight bold))
-          ("PLANNED"     . (:background "#7dcfff" :foreground "#1a1b26" :distant-foreground "#7dcfff" :weight bold))
-          ("READY"       . (:background "#e0af68" :foreground "#1a1b26" :distant-foreground "#e0af68" :weight bold))
-          ("ACTIVE"      . (:background "#7aa2f7" :foreground "#1a1b26" :distant-foreground "#7aa2f7" :weight bold))
-          ("HOLD"        . (:background "#bb9af7" :foreground "#1a1b26" :distant-foreground "#bb9af7" :weight bold))
-          ("COMPLETED"   . (:background "#9ece6a" :foreground "#1a1b26" :distant-foreground "#9ece6a" :weight bold))))
+          ("PLANNED"     . (:background "#7dcfff" :foreground "#1a1b26" :distant-foreground "#c0caf5" :weight bold))
+          ("READY"       . (:background "#e0af68" :foreground "#1a1b26" :distant-foreground "#c0caf5" :weight bold))
+          ("ACTIVE"      . (:background "#7aa2f7" :foreground "#1a1b26" :distant-foreground "#c0caf5" :weight bold))
+          ("HOLD"        . (:background "#bb9af7" :foreground "#1a1b26" :distant-foreground "#c0caf5" :weight bold))
+          ("COMPLETED"   . (:background "#9ece6a" :foreground "#1a1b26" :distant-foreground "#c0caf5" :weight bold))))
 
   (defun jd/org-agenda-format-project (txt)
     "Append the PROJECT property of the task to the agenda item."
@@ -730,6 +730,7 @@ folder, otherwise delete a word"
           ("d" "Dashboard"
            ((agenda ""
                     ((org-agenda-span 7)
+                     (org-agenda-start-on-weekday nil)
                      (org-agenda-sorting-strategy
                       '(deadline-up priority-down time-up))
                      (org-deadline-warning-days 2)
