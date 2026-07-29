@@ -35,11 +35,16 @@ replacing it:
   - ESLint diagnostics via lsp-mode's built-in `lsp-eslint` client (distinct
     from type errors — lint rules, not types)
   - JSON/CSS/HTML via the built-in servers from `vscode-langservers-extracted`
-- **External binaries required on PATH** (installed once, outside Emacs, not
-  managed by straight.el):
-  ```
-  pnpm add -g typescript typescript-language-server @tailwindcss/language-server vscode-langservers-extracted
-  ```
+- **Server binaries**: lsp-mode manages its own copies of `typescript-language-server`
+  and `tailwindcss-language-server` via its built-in npm-based installer
+  (`M-x lsp-install-server`, or an automatic prompt the first time a client
+  activates and its server isn't found) — confirmed by reading the vendored
+  source in `straight/repos/lsp-mode/clients/lsp-javascript.el` (`:server-id
+  'ts-ls`, `:download-server-fn` using `lsp-dependency` with `:npm`) and
+  `clients/lsp-tailwindcss.el`. No manual global `pnpm add -g` install is
+  needed; the only external requirement is `npm` itself being on PATH (already
+  true here via mise). JSON/CSS/HTML support and ESLint diagnostics come from
+  lsp-mode's bundled clients the same way — no manual setup for any of them.
 - **Known gap**: Prisma's language server has no clean standalone npm package
   usable outside the VSCode extension. `.prisma` files get tree-sitter syntax
   highlighting only (see section 2), no LSP features. This is accepted as a
@@ -131,6 +136,5 @@ Following the existing `SPC <letter>` leader-key style:
 `lsp-mode`, `lsp-ui`, `flycheck`, `treesit-auto`, `apheleia`, `yasnippet`,
 `yasnippet-snippets`, `dotenv-mode`, `editorconfig`, `markdown-mode` — all via
 `straight.el`/`use-package`, matching the existing config's package-management
-approach. Plus one external, non-Emacs setup step: global install of
-`typescript typescript-language-server @tailwindcss/language-server
-vscode-langservers-extracted` via `pnpm add -g`.
+approach. No external non-Emacs setup step is required; lsp-mode downloads its
+own server binaries on first use (see section 1).
