@@ -1148,4 +1148,15 @@ Like a popup terminal buffer instead of vterm taking over the whole view."
   (lsp-ui-sideline-enable t)
   (lsp-ui-doc-enable t))
 
+;; FORMATTING -----------------------
+(use-package apheleia
+  :straight t
+  :config
+  ;; apheleia already ships a 'prettier formatter definition that resolves
+  ;; each project's local node_modules/.bin/prettier first -- these lines
+  ;; only map the tree-sitter mode names onto that existing formatter.
+  (dolist (mode '(typescript-ts-mode tsx-ts-mode js-ts-mode css-ts-mode json-ts-mode))
+    (setf (alist-get mode apheleia-mode-alist) '(prettier)))
+  (apheleia-global-mode 1))
+
 ;;; init.el ends here
