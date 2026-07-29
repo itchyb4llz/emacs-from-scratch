@@ -259,6 +259,7 @@
 
   "b"   '(:ignore t :which-key "buffer")
   "bb"  '(switch-to-buffer :which-key "show buffer")
+  "bd"  '(kill-current-buffer :which-key "kill buffer")
   "bi"  '(ibuffer :which-key "show ibuffer")
   "bk"  '(kill-this-buffer :which-key "kill buffer")
   "bm"  '(bookmark-set :which-key "set bookmark")
@@ -287,6 +288,14 @@
   "ot"  '(jd/vterm-toggle :which-key "toggle vterm (bottom)")
   "ou"  '(org-roam-db-sync :which-key "org-roam db sync")
   "oa"  '(org-agenda :which-key "org agenda")
+  "od"  '(org-download-clipboard :which-key "paste image from clipboard")
+  "oT"  '(org-transclusion-mode :which-key "toggle transclusion")
+
+  "oc"  '(:ignore t :which-key "clock")
+  "oci" '(org-clock-in :which-key "clock in")
+  "oco" '(org-clock-out :which-key "clock out")
+  "ocg" '(org-clock-goto :which-key "clock goto")
+  "ocr" '(org-clock-report :which-key "clock report")
 
   "x"   '(org-capture :which-key "org capture")
 
@@ -644,6 +653,11 @@ folder, otherwise delete a word"
 
 ;; (global-set-key (kbd "C-c t") (lambda () (interactive) (find-file "~/org/tasks.org")))
 
+;; Declarative keyword syntax for org-capture-templates -- loaded before org
+;; itself since org's :config below builds org-capture-templates with it.
+(use-package doct
+  :demand t)
+
 (use-package org
   :defer t
   :hook (org-mode . jd/org-mode-setup)
@@ -663,6 +677,14 @@ folder, otherwise delete a word"
   (setq org-log-done 'time)
   (setq org-log-into-drawer t)
   (setq org-agenda-start-on-weekday 0)
+
+  ;; CLOCKING -- billable time against client/project tasks. Persist across
+  ;; restarts, and auto-flip a clocked-in task to IN-PROGRESS since that's
+  ;; already a state in org-todo-keywords below.
+  (setq org-clock-persist t)
+  (setq org-clock-in-switch-to-state "IN-PROGRESS")
+  (setq org-clock-out-remove-zero-time-clocks t)
+  (org-clock-persistence-insinuate)
 
   (setq org-todo-keywords
         '((sequence
@@ -770,7 +792,16 @@ folder, otherwise delete a word"
                       "NEXT 7 DAYS\n")))
             (todo "NEXT"
                   ((org-agenda-overriding-header
-                    "\nNEXT Actions across all projects\n")))))))
+                    "\nNEXT Actions across all projects\n")))))
+
+          ("p" "By Project"
+           ((alltodo ""
+                     ((org-agenda-overriding-header "")
+                      (org-super-agenda-groups
+                       '((:name "In Flight" :todo ("NEXT" "IN-PROGRESS"))
+                         (:name "Waiting / Review" :todo ("WAIT" "REVIEW"))
+                         (:auto-property "PROJECT")
+                         (:name "No Project" :anything t)))))))))
 
   (setq org-modules
         '(org-crypt
@@ -785,37 +816,49 @@ folder, otherwise delete a word"
   (setq org-outline-path-complete-in-steps nil)
 
   (setq org-capture-templates
-        '(
-          ("i" "Inbox" entry
-           (file "~/org/inbox.org")
-           "* TODO %?\n  Captured: %U\n  %a"
-           :empty-lines 1)
+        (doct '(("Inbox" :keys "i"
+                 :file "~/org/inbox.org"
+                 :template "* TODO %?\n  Captured: %U\n  %a"
+                 :empty-lines 1)
 
-          ("c" "Client" entry
-           (file "~/org/clients.org")
-           "* %^{Client}\n** Active Tasks\n** Bugs\n** Feature Requests\n** Waiting/Blocked\n** Invoices & Billing\n** Done/Archive\n")
+                ("Client" :keys "c"
+                 :file "~/org/clients.org"
+                 :template ("* %^{Client}"
+                            "** Active Tasks"
+                            "** Bugs"
+                            "** Feature Requests"
+                            "** Waiting/Blocked"
+                            "** Invoices & Billing"
+                            "*** Time Log"
+                            "#+BEGIN: clocktable :scope tree1 :maxlevel 3 :fileskip0 t"
+                            "#+END:"
+                            "** Done/Archive"
+                            ""))
 
-          ("n" "Notes" entry
-           (file+headline "~/org/notes.org" "Inbox")
-           "* [%<%Y-%m-%d %a>] %^{Title}\n:PROPERTIES:\n:CREATED: %U\n:END:\n%?"
-           :empty-lines 1)
+                ("Notes" :keys "n"
+                 :file "~/org/notes.org"
+                 :headline "Inbox"
+                 :template "* [%<%Y-%m-%d %a>] %^{Title}\n:PROPERTIES:\n:CREATED: %U\n:END:\n%?"
+                 :empty-lines 1)
 
-          ("b" "Bills" entry
-           (file "~/org/bills.org")
-           "* TODO %^{New Bill}\nDEADLINE: %^{DEADLINE}T\n:PROPERTIES:\n:CREATED: %U\n:END:\n%?")
+                ("Bills" :keys "b"
+                 :file "~/org/bills.org"
+                 :template "* TODO %^{New Bill}\nDEADLINE: %^{DEADLINE}T\n:PROPERTIES:\n:CREATED: %U\n:END:\n%?")
 
-          ("e" "Event" entry
-           (file+headline "~/org/calendar.org" "Events")
-           "* %^{Event}\nSCHEDULED: %^{SCHEDULED}T\n:PROPERTIES:\n:CREATED: %U\n:CONTACT:\n:END:\n%?")
+                ("Event" :keys "e"
+                 :file "~/org/calendar.org"
+                 :headline "Events"
+                 :template "* %^{Event}\nSCHEDULED: %^{SCHEDULED}T\n:PROPERTIES:\n:CREATED: %U\n:CONTACT:\n:END:\n%?")
 
-          ("d" "Deadline" entry
-           (file+headline "~/org/calendar.org" "Deadlines")
-           "* TODO %^{Task}\nDEADLINE: %^{Deadline}T\n:PROPERTIES:\n:CREATED: %U\n:END:\n%?")
+                ("Deadline" :keys "d"
+                 :file "~/org/calendar.org"
+                 :headline "Deadlines"
+                 :template "* TODO %^{Task}\nDEADLINE: %^{Deadline}T\n:PROPERTIES:\n:CREATED: %U\n:END:\n%?")
 
-          ("m" "Meeting" entry
-           "* TODO %^{Meeting}\nSCHEDULED: <%^{Date}>\n%?"
-           :target (file "meetings.org")
-           :unnarrowed t)))
+                ("Meeting" :keys "m"
+                 :file "meetings.org"
+                 :template "* TODO %^{Meeting}\nSCHEDULED: <%^{Date}>\n%?"
+                 :unnarrowed t))))
 
   (evil-define-key '(normal insert visual) org-mode-map (kbd "C-j") 'org-next-visible-heading)
   (evil-define-key '(normal insert visual) org-mode-map (kbd "C-k") 'org-previous-visible-heading)
@@ -873,6 +916,15 @@ folder, otherwise delete a word"
   (set-face-attribute 'org-meta-line nil :inherit '(font-lock-comment-face fixed-pitch))
   (set-face-attribute 'org-checkbox nil :inherit 'fixed-pitch)
 
+  ;; The org-modern checked-box glyph (a checkmark inside a small box) doesn't
+  ;; render legibly at normal text size in some fonts. Strike through the
+  ;; item's text instead so "done" is obvious regardless of how the box glyph
+  ;; itself looks.
+  (font-lock-add-keywords
+   'org-mode
+   '(("^[ \t]*\\(?:[-+*]\\|[0-9]+[.)]\\)[ \t]+\\[X\\][ \t]+\\(.*\\)$"
+      (1 '(:strike-through t :foreground "#565f89") append))))
+
   ;; Get rid of the background on column views
   (set-face-attribute 'org-column nil :background nil)
   (set-face-attribute 'org-column-title nil :background nil)
@@ -897,6 +949,16 @@ folder, otherwise delete a word"
     (require 'evil-org-agenda)
     (evil-org-agenda-set-keys)))
 
+;; Reveal emphasis markers/links only while point is on them -- pairs with
+;; org-hide-emphasis-markers t above, which otherwise hides them permanently.
+(use-package org-appear
+  :after org
+  :hook (org-mode . org-appear-mode)
+  :custom
+  (org-appear-autoemphasis t)
+  (org-appear-autolinks t)
+  (org-appear-autosubmarkers t))
+
 ;; PRETTY ORG (like Doom Emacs' org +pretty) -----------------------
 (use-package org-modern
   :straight t
@@ -907,7 +969,24 @@ folder, otherwise delete a word"
   ;; Headers/stars stay exactly as-is (visible by default) -- don't hide or replace them
   (org-modern-star nil)
   (org-modern-hide-stars nil)
+  ;; valign handles table alignment instead -- the two aren't compatible together
+  (org-modern-table nil)
   (org-modern-todo-faces org-todo-keyword-faces))
+
+;; org-modern hides its own source-block fringe styling once org-indent-mode
+;; is on (which jd/org-mode-setup always enables) -- this restores it.
+(use-package org-modern-indent
+  :straight (org-modern-indent :type git :host github :repo "jdtsmith/org-modern-indent")
+  :after org
+  :hook (org-mode . org-modern-indent-mode))
+
+;; Pixel-perfect table alignment under variable-pitch-mode, which
+;; jd/org-mode-setup turns on for every org buffer.
+(use-package valign
+  :after org
+  :hook (org-mode . valign-mode)
+  :custom
+  (valign-fancy-bar t))
 
 ;; PRESENTATIONS -----------------------
 ;; org-present
@@ -1020,6 +1099,35 @@ folder, otherwise delete a word"
   :config
   (require 'org-roam-dailies)
   (org-roam-db-autosync-enable))
+
+;; AGENDA GROUPING -----------------------
+;; Lets agenda views declare `org-super-agenda-groups' to auto-bucket entries
+;; (e.g. by property, tag, or todo state) instead of hand-writing a block per
+;; bucket. The existing Dashboard/Overdue/Week Ahead commands are untouched;
+;; see the new "By Project" ("p") command below for what this buys you.
+(use-package org-super-agenda
+  :after org-agenda
+  :config
+  (org-super-agenda-mode))
+
+;; IMAGES -----------------------
+;; Drag-and-drop / clipboard-paste images straight into org files as links.
+(use-package org-download
+  :after org
+  :hook ((dired-mode . org-download-enable)
+         (org-mode . org-download-enable))
+  :custom
+  (org-download-method 'directory)
+  (org-download-image-dir "./images")
+  (org-download-heading-lvl nil)
+  (org-download-timestamp "%Y%m%d-%H%M%S_"))
+
+;; TRANSCLUSION -----------------------
+;; Embed a live copy of a heading/section from one org file inside another,
+;; so e.g. a project note can surface a client's open tasks without
+;; duplicating and manually re-syncing the text.
+(use-package org-transclusion
+  :after org)
 
 ;; Enable auto-archiving on TODO -> DONE
 ;; (setq org-archive-location "~/org/archive.org::")
