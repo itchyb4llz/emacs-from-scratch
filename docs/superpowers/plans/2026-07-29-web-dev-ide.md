@@ -56,10 +56,11 @@ New string:
 (use-package treesit-auto
   :straight t
   :custom
-  ;; 'always instead of the package default 'prompt -- grammar installs
-  ;; happen without a blocking y-or-n-p, which matters when init.el is
-  ;; loaded non-interactively (e.g. --batch checks).
-  (treesit-auto-install 'always)
+  ;; t (not the package default 'prompt) -- grammar installs happen without
+  ;; a blocking y-or-n-p, which matters when init.el is loaded
+  ;; non-interactively (e.g. --batch checks). 'always is NOT a valid value
+  ;; for this defcustom (only t/nil/'prompt are) and silently no-ops if used.
+  (treesit-auto-install t)
   :config
   (treesit-auto-add-to-auto-mode-alist 'all)
   (global-treesit-auto-mode))
