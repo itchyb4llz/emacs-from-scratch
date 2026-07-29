@@ -1170,4 +1170,25 @@ Like a popup terminal buffer instead of vterm taking over the whole view."
   :straight t
   :after yasnippet)
 
+;; MISC FILE TYPES -----------------------
+(use-package dotenv-mode
+  :straight t
+  :mode ("\\.env\\..*\\'" "\\.env\\'"))
+
+(use-package editorconfig
+  :straight t
+  :config
+  (editorconfig-mode 1))
+
+(use-package markdown-mode
+  :straight t
+  :mode ("\\.md\\'" . gfm-mode))
+
+(add-to-list 'auto-mode-alist '("\\.sql\\'" . sql-mode))
+
+;; Prisma schema files -- no maintained tree-sitter grammar or MELPA major
+;; mode exists as of this writing; conf-mode gives basic comment/string
+;; highlighting until a real mode shows up.
+(add-to-list 'auto-mode-alist '("\\.prisma\\'" . conf-mode))
+
 ;;; init.el ends here
