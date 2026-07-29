@@ -1075,4 +1075,16 @@ Like a popup terminal buffer instead of vterm taking over the whole view."
      (buf (jd/vterm--dock-below buf))
      (t (jd/vterm--dock-below (save-window-excursion (vterm) (current-buffer)))))))
 
+;; LANGUAGE MODES (TREE-SITTER) -----------------------
+(use-package treesit-auto
+  :straight t
+  :custom
+  ;; 'always instead of the package default 'prompt -- grammar installs
+  ;; happen without a blocking y-or-n-p, which matters when init.el is
+  ;; loaded non-interactively (e.g. --batch checks).
+  (treesit-auto-install 'always)
+  :config
+  (treesit-auto-add-to-auto-mode-alist 'all)
+  (global-treesit-auto-mode))
+
 ;;; init.el ends here
