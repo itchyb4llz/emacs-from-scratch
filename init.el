@@ -475,6 +475,7 @@ folder, otherwise delete a word"
 (use-package corfu
   :straight '(corfu :host github
                     :repo "minad/corfu")
+  :demand t
   :bind (:map corfu-map
               ("C-j" . corfu-next)
               ("C-k" . corfu-previous)
@@ -482,7 +483,7 @@ folder, otherwise delete a word"
   :custom
   (corfu-cycle t)
   :config
-  (corfu-global-mode))
+  (global-corfu-mode))
 
 ;; Improved Candidate Filtering with Orderless
 (use-package orderless
@@ -1076,10 +1077,11 @@ Like a popup terminal buffer instead of vterm taking over the whole view."
 (use-package treesit-auto
   :straight t
   :custom
-  ;; 'always instead of the package default 'prompt -- grammar installs
-  ;; happen without a blocking y-or-n-p, which matters when init.el is
-  ;; loaded non-interactively (e.g. --batch checks).
-  (treesit-auto-install 'always)
+  ;; t (not the package default 'prompt) -- grammar installs happen without
+  ;; a blocking y-or-n-p, which matters when init.el is loaded
+  ;; non-interactively (e.g. --batch checks). 'always is NOT a valid value
+  ;; for this defcustom (only t/nil/'prompt are) and silently no-ops if used.
+  (treesit-auto-install t)
   :config
   (treesit-auto-add-to-auto-mode-alist 'all)
   (global-treesit-auto-mode))
@@ -1185,6 +1187,7 @@ Like a popup terminal buffer instead of vterm taking over the whole view."
   :mode ("\\.md\\'" . gfm-mode))
 
 (add-to-list 'auto-mode-alist '("\\.sql\\'" . sql-mode))
+(add-to-list 'auto-mode-alist '("\\.[cm]js\\'" . js-ts-mode))
 
 ;; Prisma schema files -- no maintained tree-sitter grammar or MELPA major
 ;; mode exists as of this writing; conf-mode gives basic comment/string
