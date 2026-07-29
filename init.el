@@ -1043,6 +1043,16 @@ folder, otherwise delete a word"
   :custom
   (magit-display-buffer-function #'magit-display-buffer-same-window-except-diff-v1))
 
+;; Diff Indicators in the Fringe (like gitsigns.nvim)
+(use-package diff-hl
+  :straight t
+  :hook ((magit-post-refresh . diff-hl-magit-post-refresh)
+         (dired-mode . diff-hl-dired-mode))
+  :init
+  (global-diff-hl-mode 1)
+  ;; Update the markers as you type, not just on save
+  (diff-hl-flydiff-mode 1))
+
 ;; Smart Parens
 (use-package smartparens
   :hook (prog-mode . smartparens-mode))
