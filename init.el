@@ -350,9 +350,7 @@
   (push '(swiper . ivy--regex-ignore-order) ivy-re-builders-alist)
   (push '(counsel-M-x . ivy--regex-ignore-order) ivy-re-builders-alist)
 
-	(setf (alist-get 'counsel-projectile-ag ivy-height-alist) 15)
-  (setf (alist-get 'counsel-projectile-rg ivy-height-alist) 15)
-  (setf (alist-get 'swiper ivy-height-alist) 15)
+	(setf (alist-get 'swiper ivy-height-alist) 15)
   (setf (alist-get 'counsel-switch-buffer ivy-height-alist) 7))
 
 (use-package ivy-hydra
@@ -372,7 +370,6 @@
                      ((ivy-rich-candidate (:width 40))
                       (ivy-rich-switch-buffer-indicators (:width 4 :face error :align right)); return the buffer indicators
                       (ivy-rich-switch-buffer-major-mode (:width 12 :face warning))          ; return the major mode info
-                      (ivy-rich-switch-buffer-project (:width 15 :face success))             ; return project name using `projectile'
                       (ivy-rich-switch-buffer-path (:width (lambda (x) (ivy-rich-switch-buffer-shorten-path x (ivy-rich-minibuffer-width 0.3))))))  ; return file path relative to project root or `default-directory' if project is nil
                      :predicate
                      (lambda (cand)
@@ -497,8 +494,8 @@ folder, otherwise delete a word"
 
 ;; Consult Commands
 (defun jd/get-project-root ()
-  (when (fboundp 'projectile-project-root)
-    (projectile-project-root)))
+  (when-let ((proj (project-current)))
+    (project-root proj)))
 
 (use-package consult
   :straight t
@@ -1086,5 +1083,16 @@ Like a popup terminal buffer instead of vterm taking over the whole view."
   :config
   (treesit-auto-add-to-auto-mode-alist 'all)
   (global-treesit-auto-mode))
+
+;; PROJECT MANAGEMENT -----------------------
+(use-package project
+  :straight nil
+  :config
+  (jd/leader-keys
+    "p"  '(:ignore t :which-key "project")
+    "pp" '(project-switch-project :which-key "switch project")
+    "pf" '(project-find-file :which-key "find file in project")
+    "ps" '(consult-ripgrep :which-key "search in project")
+    "pk" '(project-kill-buffers :which-key "kill project buffers")))
 
 ;;; init.el ends here
