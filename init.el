@@ -284,7 +284,7 @@
   "ol"  '(display-line-numbers-mode :which-key "display line numbers")
   "on"  '(jd/search-org-files :which-key "show notes")
   "op"  '(org-present :which-key "org-mode presentation")
-  "ot"  '(vterm :which-key "launch vterm")
+  "ot"  '(jd/vterm-toggle :which-key "toggle vterm (bottom)")
   "ou"  '(org-roam-db-sync :which-key "org-roam db sync")
   "oa"  '(org-agenda :which-key "org agenda")
 
@@ -687,20 +687,25 @@ folder, otherwise delete a word"
            "COMPLETED(m!)")))
 
   ;; Colors for the TODO keywords above (Tokyo Night palette)
+  ;; Solid background + dark text so org-modern's keyword "badge" is filled in,
+  ;; not just an empty box outline. :distant-foreground kicks in when an
+  ;; overlay (global-hl-line-mode, region, etc.) covers the badge with a dark
+  ;; background of its own -- without it, our dark text blends into that
+  ;; overlay and looks like the badge colors vanished under the cursor line.
   (setq org-todo-keyword-faces
-        '(("TODO"        . (:foreground "#f7768e" :weight bold))
-          ("NEXT"        . (:foreground "#7aa2f7" :weight bold))
-          ("IN-PROGRESS" . (:foreground "#e0af68" :weight bold))
-          ("WAIT"        . (:foreground "#bb9af7" :weight bold))
-          ("REVIEW"      . (:foreground "#2ac3de" :weight bold))
-          ("DONE"        . (:foreground "#9ece6a" :weight bold))
-          ("CANCELLED"   . (:foreground "#565f89" :weight bold :strike-through t))
-          ("BACKLOG"     . (:foreground "#565f89" :weight bold))
-          ("PLANNED"     . (:foreground "#7dcfff" :weight bold))
-          ("READY"       . (:foreground "#e0af68" :weight bold))
-          ("ACTIVE"      . (:foreground "#7aa2f7" :weight bold))
-          ("HOLD"        . (:foreground "#bb9af7" :weight bold))
-          ("COMPLETED"   . (:foreground "#9ece6a" :weight bold))))
+        '(("TODO"        . (:background "#f7768e" :foreground "#1a1b26" :distant-foreground "#f7768e" :weight bold))
+          ("NEXT"        . (:background "#7aa2f7" :foreground "#1a1b26" :distant-foreground "#7aa2f7" :weight bold))
+          ("IN-PROGRESS" . (:background "#e0af68" :foreground "#1a1b26" :distant-foreground "#e0af68" :weight bold))
+          ("WAIT"        . (:background "#bb9af7" :foreground "#1a1b26" :distant-foreground "#bb9af7" :weight bold))
+          ("REVIEW"      . (:background "#2ac3de" :foreground "#1a1b26" :distant-foreground "#2ac3de" :weight bold))
+          ("DONE"        . (:background "#9ece6a" :foreground "#1a1b26" :distant-foreground "#9ece6a" :weight bold))
+          ("CANCELLED"   . (:background "#414868" :foreground "#565f89" :distant-foreground "#c0caf5" :weight bold :strike-through t))
+          ("BACKLOG"     . (:background "#414868" :foreground "#c0caf5" :distant-foreground "#c0caf5" :weight bold))
+          ("PLANNED"     . (:background "#7dcfff" :foreground "#1a1b26" :distant-foreground "#7dcfff" :weight bold))
+          ("READY"       . (:background "#e0af68" :foreground "#1a1b26" :distant-foreground "#e0af68" :weight bold))
+          ("ACTIVE"      . (:background "#7aa2f7" :foreground "#1a1b26" :distant-foreground "#7aa2f7" :weight bold))
+          ("HOLD"        . (:background "#bb9af7" :foreground "#1a1b26" :distant-foreground "#bb9af7" :weight bold))
+          ("COMPLETED"   . (:background "#9ece6a" :foreground "#1a1b26" :distant-foreground "#9ece6a" :weight bold))))
 
   (defun jd/org-agenda-format-project (txt)
     "Append the PROJECT property of the task to the agenda item."
@@ -818,6 +823,16 @@ folder, otherwise delete a word"
 
   (evil-define-key '(normal insert visual) org-mode-map (kbd "M-j") 'org-metadown)
   (evil-define-key '(normal insert visual) org-mode-map (kbd "M-k") 'org-metaup)
+
+  ;; "t" (evil-org's todo keytheme) still cycles/prompts through every TODO
+  ;; state. RET is an extra shortcut that only ever marks the heading DONE,
+  ;; and otherwise behaves like normal RET.
+  (defun jd/org-return-or-todo-done ()
+    (interactive)
+    (if (org-at-heading-p)
+        (org-todo "DONE")
+      (call-interactively 'evil-ret)))
+  (evil-define-key 'normal org-mode-map (kbd "RET") 'jd/org-return-or-todo-done)
 
   (org-babel-do-load-languages
    'org-babel-load-languages
@@ -1039,5 +1054,24 @@ folder, otherwise delete a word"
   :commands vterm
   :config
   (setq vterm-max-scrollback 10000))
+
+(defun jd/vterm--dock-below (buf)
+  "Show BUF in a window docked to the bottom of the frame, not a full-frame split."
+  (let ((window (split-window (frame-root-window)
+                               (- (max 12 (/ (frame-height) 3)))
+                               'below)))
+    (set-window-buffer window buf)
+    (select-window window)))
+
+(defun jd/vterm-toggle ()
+  "Toggle a vterm terminal docked in a small window at the bottom of the frame.
+Like a popup terminal buffer instead of vterm taking over the whole view."
+  (interactive)
+  (let* ((buf (get-buffer "*vterm*"))
+         (win (and buf (get-buffer-window buf))))
+    (cond
+     (win (delete-window win))
+     (buf (jd/vterm--dock-below buf))
+     (t (jd/vterm--dock-below (save-window-excursion (vterm) (current-buffer)))))))
 
 ;;; init.el ends here
