@@ -643,12 +643,27 @@ folder, otherwise delete a word"
 (setq-default fill-column 125)
 
 ;; Turn on indentation and auto-fill mode for Org files
+(defun jd/org-hl-line-range ()
+  "Current-line range for `hl-line-mode' that skips the TODO keyword.
+Emacs overlays always override a text-property face for the same
+attribute, so without this, `global-hl-line-mode's overlay would blot
+out the solid backgrounds set in `org-todo-keyword-faces' whenever
+point is on that headline."
+  (let ((eol (line-end-position))
+        (kw-end (and (let ((case-fold-search nil))
+                       (save-excursion
+                         (goto-char (line-beginning-position))
+                         (looking-at org-todo-line-regexp)))
+                     (match-end 2))))
+    (cons (or kw-end (line-beginning-position)) eol)))
+
 (defun jd/org-mode-setup ()
   (org-indent-mode)
   (variable-pitch-mode 1)
   (auto-fill-mode 0)
   (visual-line-mode 1)
   (setq evil-auto-indent nil)
+  (setq-local hl-line-range-function #'jd/org-hl-line-range)
   (diminish org-indent-mode))
 
 ;; (global-set-key (kbd "C-c t") (lambda () (interactive) (find-file "~/org/tasks.org")))
@@ -882,15 +897,15 @@ folder, otherwise delete a word"
 
   (push '("conf-unix" . conf-unix) org-src-lang-modes)
 
-;; Fonts and Bullets
-;; (use-package org-superstar
-;;   :after org
-;;   :hook (org-mode . org-superstar-mode)
-;;   :custom
-;;   (org-superstar-remove-leading-stars t)
-;;   (org-superstar-headline-bullets-list '("◉" "○" "●" "○" "●" "○" "●")))
+  ;; Fonts and Bullets
+  ;; (use-package org-superstar
+  ;;   :after org
+  ;;   :hook (org-mode . org-superstar-mode)
+  ;;   :custom
+  ;;   (org-superstar-remove-leading-stars t)
+  ;;   (org-superstar-headline-bullets-list '("◉" "○" "●" "○" "●" "○" "●")))
 
-;; Increase the size of various headings
+  ;; Increase the size of various headings
   (set-face-attribute 'org-document-title nil :font "JetBrains Mono Nerd Font" :weight 'bold :height 1.0)
   (dolist (face '((org-level-1 . 1.0)
                   (org-level-2 . 1.0)
@@ -1086,14 +1101,14 @@ folder, otherwise delete a word"
        ("Journal")))))
 
   :bind (("C-c n l" . org-roam-buffer-toggle)
-        ("C-c n f" . org-roam-node-find)
-        ("C-c n i" . org-roam-node-insert)
-        ("C-c n c" . org-roam-capture)
-        :map org-mode-map
-        ("C-M-i" . completion-at-point)
-        :map org-roam-dailies-map
-        ("Y" . org-roam-dailies-capture-yesterday)
-        ("T" . org-roam-dailies-capture-tomorrow))
+         ("C-c n f" . org-roam-node-find)
+         ("C-c n i" . org-roam-node-insert)
+         ("C-c n c" . org-roam-capture)
+         :map org-mode-map
+         ("C-M-i" . completion-at-point)
+         :map org-roam-dailies-map
+         ("Y" . org-roam-dailies-capture-yesterday)
+         ("T" . org-roam-dailies-capture-tomorrow))
   :bind-keymap
   ("C-c n d" . org-roam-dailies-map)
   :config
@@ -1175,8 +1190,8 @@ folder, otherwise delete a word"
 (defun jd/vterm--dock-below (buf)
   "Show BUF in a window docked to the bottom of the frame, not a full-frame split."
   (let ((window (split-window (frame-root-window)
-                               (- (max 12 (/ (frame-height) 3)))
-                               'below)))
+                              (- (max 12 (/ (frame-height) 3)))
+                              'below)))
     (set-window-buffer window buf)
     (select-window window)))
 
