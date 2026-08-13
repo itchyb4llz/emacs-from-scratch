@@ -183,13 +183,79 @@
 ;; Don't warn when advice is added for functions
 (setq ad-redefinition-action 'accept)
 
+;; OMARCHY THEME SYNC -----------------------
+;; Maps the active omarchy theme (~/.config/omarchy/current/theme.name) to the
+;; closest doom-themes theme, and watches for omarchy theme switches to reload
+;; live.
+(require 'filenotify)
+
+(defvar jd/omarchy-current-dir (expand-file-name "~/.config/omarchy/current"))
+(defvar jd/omarchy-theme-name-file (expand-file-name "theme.name" jd/omarchy-current-dir))
+
+(defvar jd/omarchy-doom-theme-alist
+  '(("catppuccin" . doom-palenight)
+    ("catppuccin-latte" . doom-one-light)
+    ("ethereal" . doom-moonlight)
+    ("everforest" . doom-pine)
+    ("flexoki-light" . doom-flatwhite)
+    ("gruvbox" . doom-gruvbox)
+    ("hackerman" . doom-1337)
+    ("kanagawa" . doom-old-hope)
+    ("lumon" . doom-ir-black)
+    ("matte-black" . doom-plain-dark)
+    ("miasma" . doom-badger)
+    ("nord" . doom-nord)
+    ("osaka-jade" . doom-city-lights)
+    ("retro-82" . doom-outrun-electric)
+    ("ristretto" . doom-monokai-ristretto)
+    ("rose-pine" . doom-fairy-floss)
+    ("tokyo-night" . doom-tokyo-night)
+    ("vantablack" . doom-homage-black)
+    ("white" . doom-homage-white))
+  "Best-effort mapping from omarchy theme names to doom-themes themes.
+doom-themes has no exact match for every omarchy theme, so entries pick
+the closest palette/mood rather than requiring a literal name match.")
+
+(defvar jd/omarchy-loaded-theme nil
+  "Doom theme last loaded via omarchy sync, to skip redundant reloads.")
+
+(defvar jd/omarchy-theme-watch-timer nil)
+
+(defun jd/omarchy-theme-name ()
+  "Return the active omarchy theme name, or nil if unreadable."
+  (when (file-readable-p jd/omarchy-theme-name-file)
+    (with-temp-buffer
+      (insert-file-contents jd/omarchy-theme-name-file)
+      (string-trim (buffer-string)))))
+
+(defun jd/omarchy-load-theme ()
+  "Load the doom theme mapped from the current omarchy theme, if changed."
+  (let ((doom-theme (or (cdr (assoc (jd/omarchy-theme-name) jd/omarchy-doom-theme-alist))
+                         'doom-one)))
+    (unless (eq doom-theme jd/omarchy-loaded-theme)
+      (mapc #'disable-theme custom-enabled-themes)
+      (load-theme doom-theme t)
+      (setq jd/omarchy-loaded-theme doom-theme))))
+
+(defun jd/omarchy-theme-watch-callback (_event)
+  "Debounce omarchy `current' dir events, then reload the mapped theme.
+`omarchy theme set' swaps a symlink and rewrites theme.name in quick
+succession, firing several fs-notify events per switch."
+  (when jd/omarchy-theme-watch-timer
+    (cancel-timer jd/omarchy-theme-watch-timer))
+  (setq jd/omarchy-theme-watch-timer
+        (run-at-time 0.1 nil #'jd/omarchy-load-theme)))
+
 (use-package doom-themes
   :straight t
   :config
   ;; Global settings (defaults)
   (setq doom-themes-enable-bold t
 	      doom-themes-enable-italic t)
-  (load-theme 'doom-tokyo-night t)
+  (jd/omarchy-load-theme)
+  (when (file-directory-p jd/omarchy-current-dir)
+    (file-notify-add-watch jd/omarchy-current-dir '(change)
+                            #'jd/omarchy-theme-watch-callback))
 
   ;; Enable flashing mode-line on errors
   (doom-themes-visual-bell-config)
