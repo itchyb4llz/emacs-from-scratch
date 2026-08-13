@@ -830,12 +830,61 @@ point is on that headline."
   (setq org-refile-allow-creating-parent-nodes 'confirm)
   (setq org-outline-path-complete-in-steps nil)
 
+  ;; Morning questions — one per ISO day-of-week
+  (defvar my/stoic-morning-questions
+    '((1 . "What today lies within my power, and what must I simply accept?")
+      (2 . "Which virtue — courage, justice, temperance, wisdom — needs my attention today?")
+      (3 . "What difficulty do I expect today, and how can I turn it to my advantage?")
+      (4 . "If I imagine my life ending tonight, how would that change how I show up today?")
+      (5 . "What would it look like to welcome whatever happens today, rather than resist it?")
+      (6 . "What burden — grudge, regret, expectation — can I set down before the day begins?")
+      (7 . "What pattern from this past week do I want to interrupt or reinforce going forward?")))
+
+  ;; Evening questions — one per ISO day-of-week
+  (defvar my/stoic-evening-questions
+    '((1 . "Where did I act from judgment today, and where did I simply react?")
+      (2 . "Did I live out the virtue I chose this morning? What tested it?")
+      (3 . "Looking back, did the obstacle I faced turn out smaller or larger than I feared?")
+      (4 . "If today had been my last, would I be at peace with how I spent it?")
+      (5 . "Was there a moment today I fought against something I couldn't change?")
+      (6 . "What did I release today that I'm better off without?")
+      (7 . "What is the one lesson from this week I don't want to have to learn again?")))
+
+  (defun my/stoic-question (list)
+    "Return today's question from LIST based on ISO day-of-week."
+    (let ((day (string-to-number (format-time-string "%u"))))
+      (cdr (assoc day list))))
+
+  (defun my/stoic-morning-question ()
+    (my/stoic-question my/stoic-morning-questions))
+
+  (defun my/stoic-evening-question ()
+    (my/stoic-question my/stoic-evening-questions))
+
+  (defun my/journal-date-headline ()
+    "Return today's date heading, e.g. 2026-08-13 Thursday."
+    (format-time-string "%Y-%m-%d %A"))
+
+  ;; doct's :headline only accepts a literal string, not a function call, so
+  ;; a dynamic "today's date" heading has to go through :function instead --
+  ;; this replicates the search-or-create logic Org's own file+headline uses.
+  (defun jd/journal-goto-date-heading ()
+    (goto-char (point-min))
+    (let ((headline (my/journal-date-headline)))
+      (if (re-search-forward (format org-complex-heading-regexp-format
+                                     (regexp-quote headline))
+                             nil t)
+          (forward-line 0)
+        (goto-char (point-max))
+        (unless (bolp) (insert "\n"))
+        (insert "* " headline "\n")
+        (forward-line -1))))
+
   (setq org-capture-templates
         (doct '(("Inbox" :keys "i"
                  :file "~/org/inbox.org"
                  :template "* TODO %?\n  Captured: %U\n  %a"
                  :empty-lines 1)
-
                 ("Client" :keys "c"
                  :file "~/org/clients.org"
                  :template ("* %^{Client}"
@@ -849,31 +898,37 @@ point is on that headline."
                             "#+END:"
                             "** Done/Archive"
                             ""))
-
                 ("Notes" :keys "n"
                  :file "~/org/notes.org"
                  :headline "Inbox"
                  :template "* [%<%Y-%m-%d %a>] %^{Title}\n:PROPERTIES:\n:CREATED: %U\n:END:\n%?"
                  :empty-lines 1)
-
                 ("Bills" :keys "b"
                  :file "~/org/bills.org"
                  :template "* TODO %^{New Bill}\nDEADLINE: %^{DEADLINE}T\n:PROPERTIES:\n:CREATED: %U\n:END:\n%?")
-
                 ("Event" :keys "e"
                  :file "~/org/calendar.org"
                  :headline "Events"
                  :template "* %^{Event}\nSCHEDULED: %^{SCHEDULED}T\n:PROPERTIES:\n:CREATED: %U\n:CONTACT:\n:END:\n%?")
-
                 ("Deadline" :keys "d"
                  :file "~/org/calendar.org"
                  :headline "Deadlines"
                  :template "* TODO %^{Task}\nDEADLINE: %^{Deadline}T\n:PROPERTIES:\n:CREATED: %U\n:END:\n%?")
-
                 ("Meeting" :keys "m"
                  :file "meetings.org"
                  :template "* TODO %^{Meeting}\nSCHEDULED: <%^{Date}>\n%?"
-                 :unnarrowed t))))
+                 :unnarrowed t)
+                ("Journal" :keys "j"
+                 :file "~/org/journal.org"
+                 :children
+                 (("Morning Reflection" :keys "m"
+                   :function jd/journal-goto-date-heading
+                   :template "* Morning Reflection - %<%I:%M %p>\n%(my/stoic-morning-question)\n\n%?"
+                   :empty-lines 1)
+                  ("Evening Reflection" :keys "e"
+                   :function jd/journal-goto-date-heading
+                   :template "* Evening Reflection - %<%I:%M %p>\n%(my/stoic-evening-question)\n\n%?"
+                   :empty-lines 1))))))
 
   (evil-define-key '(normal insert visual) org-mode-map (kbd "C-j") 'org-next-visible-heading)
   (evil-define-key '(normal insert visual) org-mode-map (kbd "C-k") 'org-previous-visible-heading)
@@ -1065,40 +1120,6 @@ point is on that headline."
       :unnarrowed t)))
 
   (org-roam-dailies-directory "~/org/journal/")
-  (org-roam-dailies-capture-templates
-   '(("d" "default" entry
-      "* %<%I:%M %p>\n%?"
-      :target
-      (file+head+olp
-       "%<%Y-%m-%d>.org"
-       "#+title: %<%Y-%m-%d>
-
-* Metrics
-** Sleep Quality
-- Time to Bed (last night):
-- Wake Time:
-
-** Meals
-- [ ] Breakfast:
-- [ ] Lunch:
-- [ ] Dinner:
-- Snacks:
-  -
-* Morning Foundation
-** TODO Morning Prayer and Scripture
-** TODO Shower, Groom, and Dressed
-** TODO Review Day's Battle Plan
-** TODO System Update
-** TODO Check Reports: issues/bugs/emails/msg/missed calls
-
-* Today's Focus
-- Main project:
-- Secondary task:
-- If I only finish one thing today, it will be:
-
-* Journal
-"
-       ("Journal")))))
 
   :bind (("C-c n l" . org-roam-buffer-toggle)
          ("C-c n f" . org-roam-node-find)
