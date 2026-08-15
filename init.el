@@ -184,12 +184,12 @@
 (setq ad-redefinition-action 'accept)
 
 ;; OMARCHY THEME SYNC -----------------------
-;; Maps the active omarchy theme (~/.config/omarchy/current/theme.name) to the
-;; closest doom-themes theme, and watches for omarchy theme switches to reload
-;; live.
+;; Maps the active omarchy theme (~/.local/state/omarchy/current/theme.name) to
+;; the closest doom-themes theme, and watches for omarchy theme switches to
+;; reload live.
 (require 'filenotify)
 
-(defvar jd/omarchy-current-dir (expand-file-name "~/.config/omarchy/current"))
+(defvar jd/omarchy-current-dir (expand-file-name "~/.local/state/omarchy/current"))
 (defvar jd/omarchy-theme-name-file (expand-file-name "theme.name" jd/omarchy-current-dir))
 
 (defvar jd/omarchy-doom-theme-alist
@@ -201,7 +201,9 @@
     ("gruvbox" . doom-gruvbox)
     ("hackerman" . doom-1337)
     ("kanagawa" . doom-old-hope)
+    ("last-horizon" . doom-miramare)
     ("lumon" . doom-ir-black)
+    ("lupine" . doom-bluloco-light)
     ("matte-black" . doom-plain-dark)
     ("miasma" . doom-badger)
     ("nord" . doom-nord)
@@ -209,6 +211,7 @@
     ("retro-82" . doom-outrun-electric)
     ("ristretto" . doom-monokai-ristretto)
     ("rose-pine" . doom-fairy-floss)
+    ("solitude" . doom-plain-dark)
     ("tokyo-night" . doom-tokyo-night)
     ("vantablack" . doom-homage-black)
     ("white" . doom-homage-white))
