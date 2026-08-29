@@ -249,6 +249,24 @@ succession, firing several fs-notify events per switch."
   (setq jd/omarchy-theme-watch-timer
         (run-at-time 0.1 nil #'jd/omarchy-load-theme)))
 
+;; ORG SRC BLOCK PADDING -----------------------
+;; org-block has no left/right padding by default, so code inside a src
+;; block sits flush against the block's edge -- easy to confuse the code's
+;; own leading whitespace/tabs with the block boundary itself. Give the
+;; block faces a box in the same color as their own background, so the box
+;; adds invisible horizontal padding instead of a visible border. Must be
+;; re-applied after every theme load (manual or omarchy-synced), since the
+;; background color is theme-dependent.
+(defun jd/org-block-padding-refresh (&rest _)
+  "Pad org src blocks with an invisible box matching their own background."
+  (dolist (face '(org-block org-block-begin-line org-block-end-line))
+    (when (facep face)
+      (set-face-attribute face nil
+                           :box (list :line-width '(6 . 1)
+                                      :color (or (face-background face nil t)
+                                                 (face-background 'default)))))))
+(advice-add 'load-theme :after #'jd/org-block-padding-refresh)
+
 (use-package doom-themes
   :straight t
   :config
@@ -1054,6 +1072,7 @@ point is on that headline."
   (set-face-attribute 'org-special-keyword nil :inherit '(font-lock-comment-face fixed-pitch))
   (set-face-attribute 'org-meta-line nil :inherit '(font-lock-comment-face fixed-pitch))
   (set-face-attribute 'org-checkbox nil :inherit 'fixed-pitch)
+  (jd/org-block-padding-refresh)
 
   ;; The org-modern checked-box glyph (a checkmark inside a small box) doesn't
   ;; render legibly at normal text size in some fonts. Strike through the
