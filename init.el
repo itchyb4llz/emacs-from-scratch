@@ -193,8 +193,8 @@
 (defvar jd/omarchy-theme-name-file (expand-file-name "theme.name" jd/omarchy-current-dir))
 
 (defvar jd/omarchy-doom-theme-alist
-  '(("catppuccin" . doom-palenight)
-    ("catppuccin-latte" . doom-one-light)
+  '(("catppuccin" . (catppuccin . mocha))
+    ("catppuccin-latte" . (catppuccin . latte))
     ("ethereal" . doom-moonlight)
     ("everforest" . doom-pine)
     ("flexoki-light" . doom-flatwhite)
@@ -215,12 +215,14 @@
     ("tokyo-night" . doom-tokyo-night)
     ("vantablack" . doom-homage-black)
     ("white" . doom-homage-white))
-  "Best-effort mapping from omarchy theme names to doom-themes themes.
-doom-themes has no exact match for every omarchy theme, so entries pick
-the closest palette/mood rather than requiring a literal name match.")
+  "Best-effort mapping from omarchy theme names to Emacs themes.
+Each value is either a theme symbol, or (THEME . FLAVOR) for themes like
+catppuccin that ship several variants under one theme name. doom-themes has
+no exact match for every omarchy theme, so entries pick the closest
+palette/mood rather than requiring a literal name match.")
 
 (defvar jd/omarchy-loaded-theme nil
-  "Doom theme last loaded via omarchy sync, to skip redundant reloads.")
+  "Theme spec last loaded via omarchy sync, to skip redundant reloads.")
 
 (defvar jd/omarchy-theme-watch-timer nil)
 
@@ -232,13 +234,17 @@ the closest palette/mood rather than requiring a literal name match.")
       (string-trim (buffer-string)))))
 
 (defun jd/omarchy-load-theme ()
-  "Load the doom theme mapped from the current omarchy theme, if changed."
-  (let ((doom-theme (or (cdr (assoc (jd/omarchy-theme-name) jd/omarchy-doom-theme-alist))
-                         'doom-one)))
-    (unless (eq doom-theme jd/omarchy-loaded-theme)
+  "Load the theme mapped from the current omarchy theme, if changed."
+  (let* ((spec (or (cdr (assoc (jd/omarchy-theme-name) jd/omarchy-doom-theme-alist))
+                   'doom-one))
+         (theme (if (consp spec) (car spec) spec)))
+    (unless (equal spec jd/omarchy-loaded-theme)
+      ;; catppuccin reads `catppuccin-flavor' when its theme file is loaded.
+      (when (and (consp spec) (eq theme 'catppuccin))
+        (setq catppuccin-flavor (cdr spec)))
       (mapc #'disable-theme custom-enabled-themes)
-      (load-theme doom-theme t)
-      (setq jd/omarchy-loaded-theme doom-theme))))
+      (load-theme theme t)
+      (setq jd/omarchy-loaded-theme spec))))
 
 (defun jd/omarchy-theme-watch-callback (_event)
   "Debounce omarchy `current' dir events, then reload the mapped theme.
@@ -266,6 +272,14 @@ succession, firing several fs-notify events per switch."
                                       :color (or (face-background face nil t)
                                                  (face-background 'default)))))))
 (advice-add 'load-theme :after #'jd/org-block-padding-refresh)
+
+;; Official catppuccin theme (https://github.com/catppuccin/emacs). Installed
+;; before doom-themes so it's on `custom-theme-load-path' when the omarchy
+;; sync below loads it. Flavors: mocha, macchiato, frappe, latte -- switch
+;; manually with (setq catppuccin-flavor 'frappe) (catppuccin-reload).
+(use-package catppuccin-theme
+  :straight t
+  :defer t)
 
 (use-package doom-themes
   :straight t
