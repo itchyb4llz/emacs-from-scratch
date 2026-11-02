@@ -53,6 +53,15 @@
 ;; DEFAULT CODING SYSTEM -----------------------
 (set-default-coding-systems 'utf-8)
 
+;; SMALL QUALITY-OF-LIFE DEFAULTS -----------------------
+(setq use-short-answers t)          ; y/n instead of yes/no everywhere
+(save-place-mode 1)                 ; reopen files where you left off
+(use-package recentf                ; needed by `consult-recent-file' (SPC f r)
+  :straight nil
+  :config
+  (setq recentf-max-saved-items 300)
+  (recentf-mode 1))
+
 ;; KEYBOARD BINDINGS -----------------------
 ;; ESC Cancels All
 (global-set-key (kbd "<escape>") 'keyboard-escape-quit)
@@ -61,10 +70,13 @@
 (global-set-key (kbd "C-M-u") 'universal-argument)
 
 ;; Let's Be Evil
-(use-package undo-tree
-  :init
-  (setq undo-tree-auto-save-history nil)
-  (global-undo-tree-mode 1))
+;; Undo: Emacs' built-in `undo-redo' replaces undo-tree (slow on big buffers,
+;; known to corrupt history). vundo gives the same visual tree on demand.
+(use-package vundo
+  :straight t
+  :commands vundo
+  :custom
+  (vundo-glyph-alist vundo-unicode-symbols))
 
 (use-package evil
   :init
@@ -73,7 +85,7 @@
   (setq evil-want-C-u-scroll t)
   (setq evil-want-C-i-jump nil)
   (setq evil-respect-visual-line-mode t)
-  (setq evil-undo-system 'undo-tree)
+  (setq evil-undo-system 'undo-redo)
   :config
   (evil-mode 1)
   (define-key evil-insert-state-map (kbd "C-g") 'evil-normal-state)
@@ -96,9 +108,8 @@
   (evil-global-set-key 'motion (kbd "<right>") 'jd/dont-arrow-me-bro)
   (evil-global-set-key 'motion (kbd "<down>") 'jd/dont-arrow-me-bro)
   (evil-global-set-key 'motion (kbd "<up>") 'jd/dont-arrow-me-bro)
-  
-  (evil-set-initial-state 'messages-buffer-mode 'normal)
-  (evil-set-initial-state 'dashboard-mode 'normal))
+
+  (evil-set-initial-state 'messages-buffer-mode 'normal))
 
 (use-package evil-collection
   :straight t
@@ -107,7 +118,9 @@
   (evil-collection-init))
 
 ;; KEYBINDING PANEL (which-key) -----------------------
+;; Built into Emacs since 30 -- no need to download it.
 (use-package which-key
+  :straight nil
   :init (which-key-mode)
   :diminish which-key-mode
   :config
@@ -146,6 +159,7 @@
 (setq mouse-wheel-follow-mouse 't) ;; scroll window under mouse
 (setq scroll-step 1) ;; keyboard scroll one line at a time
 (setq use-dialog-box nil) ;; Disable dialog boxes since they weren't working in Mac OSX
+(pixel-scroll-precision-mode 1) ;; smooth touchpad/mouse scrolling (and over inline images)
 
 ;; Set frame transparency and windows
 ;; (set-frame-parameter (selected-frame) 'alpha '(80 . 80))
@@ -273,6 +287,37 @@ succession, firing several fs-notify events per switch."
                                                  (face-background 'default)))))))
 (advice-add 'load-theme :after #'jd/org-block-padding-refresh)
 
+;; CHECKED CHECKBOX FADE -----------------------
+;; Text of a checked [X] item is drawn at reduced "opacity". Emacs has no real
+;; text alpha, so the foreground is blended toward the background instead --
+;; recomputed after every theme load so it stays correct with omarchy sync.
+(defvar jd/org-checkbox-done-opacity 0.4
+  "How visible checked checkbox text is: 1.0 = normal, 0.0 = invisible.")
+
+(defface jd/org-checkbox-done-text '((t :inherit shadow))
+  "Face for the text of checked org checkbox items.")
+
+(defun jd/org-checkbox-fade-refresh (&rest _)
+  "Blend checked-item text toward the background by `jd/org-checkbox-done-opacity'."
+  (require 'color)
+  (let ((fg (jd/color-rgb (face-foreground 'default nil t)))
+        (bg (jd/color-rgb (face-background 'default nil t))))
+    (when (and fg bg)
+      (set-face-attribute 'jd/org-checkbox-done-text nil
+                          :inherit 'unspecified
+                          :foreground (apply #'color-rgb-to-hex
+                                             (append (color-blend fg bg jd/org-checkbox-done-opacity)
+                                                     '(2)))))))
+
+(defun jd/color-rgb (color)
+  "COLOR as a list of 0.0-1.0 floats, or nil. Parses #hex exactly (the
+display-based `color-name-to-rgb' snaps to a palette on terminals/daemons)."
+  (when (stringp color)
+    (if-let ((vals (color-values-from-color-spec color)))
+        (mapcar (lambda (v) (/ v 65535.0)) vals)
+      (color-name-to-rgb color))))
+(advice-add 'load-theme :after #'jd/org-checkbox-fade-refresh)
+
 ;; Official catppuccin theme (https://github.com/catppuccin/emacs). Installed
 ;; before doom-themes so it's on `custom-theme-load-path' when the omarchy
 ;; sync below loads it. Flavors: mocha, macchiato, frappe, latte -- switch
@@ -294,11 +339,6 @@ succession, firing several fs-notify events per switch."
 
   ;; Enable flashing mode-line on errors
   (doom-themes-visual-bell-config)
-  ;; Enable custom neotree theme (all-the-icons must be installed!)
-  (doom-themes-neotree-config)
-  ;; or for treemacs users
-  (setq doom-themes-treemacs-theme "doom-tokyonight") ; use "doom-colors" for less minimal icon theme
-  (doom-themes-treemacs-config)
   ;; Corrects (and improves) org-mode's native fontification
   (doom-themes-org-config))
 
@@ -309,10 +349,13 @@ succession, firing several fs-notify events per switch."
 (set-face-attribute 'fixed-pitch nil :font "JetBrains Mono Nerd Font" :weight 'medium :height jd/default-font-size)
 (set-face-attribute 'variable-pitch nil :font "JetBrains Mono Nerd Font" :height jd/default-font-size)
 
-;; Emojis in buffers
-(use-package emojify
-  :hook (erc-mode . emojify-mode)
-  :commands emojify-mode)
+;; ICONS -----------------------
+;; nerd-icons replaces all-the-icons: it draws from the Nerd Font you already
+;; use (no separate icon-font install step), and doom-modeline already uses it.
+(use-package nerd-icons
+  :straight t
+  :custom
+  (nerd-icons-font-family "JetBrains Mono Nerd Font"))
 
 ;; MODE LINE -----------------------
 (setq display-time-format "%l:%M %p %b %y"
@@ -320,12 +363,6 @@ succession, firing several fs-notify events per switch."
 
 ;; Enable Mode Diminishing
 (use-package diminish)
-
-;; Doom Modeline
-;; You must run (all-the-icons-install-fonts) one time after
-;; installing this package!
-
-(use-package all-the-icons)
 
 (use-package minions
   :hook (doom-modeline-mode . minions-mode))
@@ -353,27 +390,33 @@ succession, firing several fs-notify events per switch."
 ;; Revert buffers when the underlying file has changed
 (global-auto-revert-mode 1)
 
-;; UI TOGGLES -----------------------
+;; LEADER KEY MAP -----------------------
+;; Mnemonic: b=buffer c=code f=file g=git h=help n=NOTES o=org/agenda
+;; p=project t=toggle x=capture. Press SPC and wait -- which-key lists all.
 (jd/leader-keys
   "."   '(find-file :which-key "find file")
-  "RET" '(list-bookmarks :which-key "show bookmarks")
+  ","   '(consult-buffer :which-key "switch buffer")
+  "/"   '(consult-ripgrep :which-key "search (project)")
+  "RET" '(consult-bookmark :which-key "bookmarks")
+  "u"   '(vundo :which-key "undo tree")
+  "x"   '(org-capture :which-key "capture")
 
   "b"   '(:ignore t :which-key "buffer")
-  "bb"  '(switch-to-buffer :which-key "show buffer")
+  "bb"  '(consult-buffer :which-key "switch buffer")
   "bd"  '(kill-current-buffer :which-key "kill buffer")
-  "bi"  '(ibuffer :which-key "show ibuffer")
-  "bk"  '(kill-this-buffer :which-key "kill buffer")
+  "bi"  '(ibuffer :which-key "ibuffer")
   "bm"  '(bookmark-set :which-key "set bookmark")
 
   "c"   '(:ignore t :which-key "code")
-  ;; "cc"  '(compile :which-key "compile code")
-  "ct"  '(org-babel-tangle :which-key "write code blocks")
+  "ct"  '(org-babel-tangle :which-key "tangle code blocks")
 
   "f"   '(:ignore t :which-key "file")
-  "fR"  '(delete-file :which-key "delete file")
-
-  "i"   '(:ignore t :which-key "insert")
-  "ii"  '(org-id-get-create :which-key "org ID")
+  "ff"  '(find-file :which-key "open file")
+  "fr"  '(consult-recent-file :which-key "recent files")
+  "fj"  '(consult-fd :which-key "jump to file (fd)")
+  "fR"  '(revert-buffer :which-key "revert file")
+  "fD"  '(delete-file :which-key "delete file")
+  "fp"  '(jd/open-config :which-key "open emacs config")
 
   "g"   '(:ignore t :which-key "magit")
   "gc"  '(magit-commit :which-key "commit")
@@ -382,15 +425,54 @@ succession, firing several fs-notify events per switch."
   "gP"  '(magit-push-current-to-upstream :which-key "push")
   "gi"  '(magit-init :which-key "git init")
 
+  "h"   '(:ignore t :which-key "help")
+  "hf"  '(helpful-callable :which-key "describe function")
+  "hv"  '(helpful-variable :which-key "describe variable")
+  "hk"  '(helpful-key :which-key "describe key")
+  "hp"  '(helpful-at-point :which-key "describe thing at point")
+  "hi"  '(consult-info :which-key "search manuals")
+
+  "i"   '(:ignore t :which-key "insert")
+  "ii"  '(org-id-get-create :which-key "org ID")
+
+  ;; NOTES -- your second brain (org-roam). This is the Notion replacement.
+  "n"   '(:ignore t :which-key "notes")
+  "nf"  '(org-roam-node-find :which-key "find / create note")
+  "ni"  '(org-roam-node-insert :which-key "link to note")
+  "nn"  '(org-roam-capture :which-key "new note (templates)")
+  "nl"  '(org-roam-buffer-toggle :which-key "backlinks panel")
+  "nb"  '(consult-org-roam-backlinks :which-key "jump to backlink")
+  "ns"  '(consult-org-roam-search :which-key "full-text search notes")
+  "nq"  '(jd/org-ql-search-all :which-key "query (like Notion filters)")
+  "nr"  '(org-roam-refile :which-key "move heading into a note")
+  "nt"  '(org-roam-tag-add :which-key "add tag")
+  "na"  '(org-roam-alias-add :which-key "add alias")
+  "nu"  '(org-roam-db-sync :which-key "re-index notes")
+  "nI"  '(jd/notion-import :which-key "import Notion export")
+  "nd"  '(:ignore t :which-key "daily journal")
+  "ndt" '(org-roam-dailies-goto-today :which-key "today")
+  "ndc" '(org-roam-dailies-capture-today :which-key "write in today")
+  "ndy" '(org-roam-dailies-goto-yesterday :which-key "yesterday")
+  "ndd" '(org-roam-dailies-goto-date :which-key "pick a date")
+  "ndp" '(org-roam-dailies-goto-previous-note :which-key "previous day")
+  "ndn" '(org-roam-dailies-goto-next-note :which-key "next day")
+
+  "o"   '(:ignore t :which-key "org")
+  "oa"  '(org-agenda :which-key "agenda menu")
+  "oo"  '(jd/org-dashboard :which-key "dashboard (today)")
+  "or"  '(org-refile :which-key "refile heading")
+  "oA"  '(org-archive-subtree :which-key "archive heading")
   "oi"  '(org-toggle-inline-images :which-key "display images in org-mode")
   "ol"  '(display-line-numbers-mode :which-key "display line numbers")
-  "on"  '(jd/search-org-files :which-key "show notes")
+  "on"  '(jd/search-org-files :which-key "grep all of ~/org")
   "op"  '(org-present :which-key "org-mode presentation")
   "ot"  '(jd/vterm-toggle :which-key "toggle vterm (bottom)")
-  "ou"  '(org-roam-db-sync :which-key "org-roam db sync")
-  "oa"  '(org-agenda :which-key "org agenda")
   "od"  '(org-download-clipboard :which-key "paste image from clipboard")
   "oT"  '(org-transclusion-mode :which-key "toggle transclusion")
+  "of"  '(:ignore t :which-key "open file")
+  "ofi" '(jd/org-open-inbox :which-key "inbox.org")
+  "oft" '(jd/org-open-tasks :which-key "tasks.org")
+  "ofs" '(jd/org-open-start-here :which-key "start-here.org (guide)")
 
   "oc"  '(:ignore t :which-key "clock")
   "oci" '(org-clock-in :which-key "clock in")
@@ -398,14 +480,19 @@ succession, firing several fs-notify events per switch."
   "ocg" '(org-clock-goto :which-key "clock goto")
   "ocr" '(org-clock-report :which-key "clock report")
 
-  "x"   '(org-capture :which-key "org capture")
+  "t"   '(:ignore t :which-key "toggles")
+  "tw"  'whitespace-mode
+  "ts"  '(jinx-mode :which-key "spell check")
+  "tt"  '(consult-theme :which-key "choose theme"))
 
-  "t" '(:ignore t :which-key "toggles")
-  "tw" 'whitespace-mode
-  "tt" '(counsel-load-theme :which-key "choose theme"))
+(defun jd/open-config ()
+  "Open this init.el."
+  (interactive)
+  (find-file user-init-file))
 
 ;; HIGHLIGHT MATCHING BRACES -----------------------
 (use-package paren
+  :straight nil
   :config
   (set-face-attribute 'show-paren-match-expression nil :background "#363e4a"))
 
@@ -426,131 +513,40 @@ succession, firing several fs-notify events per switch."
 	:hook ((text-mode . ws-butler-mode)
 				 (prog-mode . ws-butler-mode)))
 
-;; STATEFUL KEYMAPS WITH HYDRA
-(use-package hydra
-	:defer 1)
+;; Better *Help* buffers: source code, references and examples inline.
+(use-package helpful
+  :straight t
+  :commands (helpful-callable helpful-variable helpful-key helpful-at-point)
+  :bind (([remap describe-function] . helpful-callable)
+         ([remap describe-variable] . helpful-variable)
+         ([remap describe-key]      . helpful-key)
+         ([remap describe-command]  . helpful-command)))
 
-;; BETTER COMPLETIONS WITH IVY -----------------------
-(use-package ivy
-	:diminish
-	:bind (("C-s" . swiper)
-				 :map ivy-minibuffer-map
-				 ("TAB" . ivy-alt-done)
-				 ("C-f" . ivy-alt-done)
-				 ("C-l" . ivy-alt-done)
-				 ("C-j" . ivy-next-line)
-				 ("C-k" . ivy-previous-line)
-				 :map ivy-switch-buffer-map
-				 ("C-k" . ivy-previous-line)
-				 ("C-l" . ivy-done)
-				 ("C-d" . ivy-switch-buffer-kill)
-				 :map ivy-reverse-i-search-map
-				 ("C-k" . ivy-previous-line)
-				 ("C-d" . ivy-reverse-i-search-kill))
-	:init
-	(ivy-mode 1)
-	:config
-	(setq ivy-use-virtual-buffers t)
-	(setq ivy-wrap t)
-	(setq ivy-count-format "(%d/%d) ")
-	(setq enable-recursive-minibuffers t)
-
-	;; Use different regex strategies per completion command
-  (push '(completion-at-point . ivy--regex-fuzzy) ivy-re-builders-alist) ;; This doesn't seem to work...
-  (push '(swiper . ivy--regex-ignore-order) ivy-re-builders-alist)
-  (push '(counsel-M-x . ivy--regex-ignore-order) ivy-re-builders-alist)
-
-	(setf (alist-get 'swiper ivy-height-alist) 15)
-  (setf (alist-get 'counsel-switch-buffer ivy-height-alist) 7))
-
-(use-package ivy-hydra
-	:defer t
-	:after hydra)
-
-(use-package ivy-rich
-  :init
-  (ivy-rich-mode 1)
-  :after counsel
-  :config
-  (setq ivy-format-function #'ivy-format-function-line)
-  (setq ivy-rich-display-transformers-list
-        (plist-put ivy-rich-display-transformers-list
-                   'ivy-switch-buffer
-                   '(:columns
-                     ((ivy-rich-candidate (:width 40))
-                      (ivy-rich-switch-buffer-indicators (:width 4 :face error :align right)); return the buffer indicators
-                      (ivy-rich-switch-buffer-major-mode (:width 12 :face warning))          ; return the major mode info
-                      (ivy-rich-switch-buffer-path (:width (lambda (x) (ivy-rich-switch-buffer-shorten-path x (ivy-rich-minibuffer-width 0.3))))))  ; return file path relative to project root or `default-directory' if project is nil
-                     :predicate
-                     (lambda (cand)
-                       (if-let ((buffer (get-buffer cand)))
-                           ;; Don't mess with EXWM buffers
-                           (with-current-buffer buffer
-                             (not (derived-mode-p 'exwm-mode)))))))))
-
-(use-package counsel
-  :demand t
-  :bind (("M-x" . counsel-M-x)
-         ("C-x b" . counsel-ibuffer)
-         ("C-x C-f" . counsel-find-file)
-         ;; ("C-M-j" . counsel-switch-buffer)
-         ("C-M-l" . counsel-imenu)
-         :map minibuffer-local-map
-         ("C-r" . 'counsel-minibuffer-history))
-  :custom
-  (counsel-linux-app-format-function #'counsel-linux-app-format-function-name-only)
-  :config
-  (setq ivy-initial-inputs-alist nil)) ;; Don't start searches with ^
-
-(use-package flx  ;; Improves sorting for fuzzy-matched results
-  :after ivy
-  :defer t
-  :init
-  (setq ivy-flx-limit 10000))
-
-(use-package wgrep)
-
-(use-package ivy-posframe
-  :disabled
-  :custom
-  (ivy-posframe-width      115)
-  (ivy-posframe-min-width  115)
-  (ivy-posframe-height     10)
-  (ivy-posframe-min-height 10)
-  :config
-  (setq ivy-posframe-display-functions-alist '((t . ivy-posframe-display-at-frame-center)))
-  (setq ivy-posframe-parameters '((parent-frame . nil)
-                                  (left-fringe . 8)
-                                  (right-fringe . 8)))
-  (ivy-posframe-mode 1))
-
-(use-package prescient
-  :after counsel
-  :config
-  (prescient-persist-mode 1))
-
-(use-package ivy-prescient
-  :after prescient
-  :config
-  (ivy-prescient-mode 1))
-
-(jd/leader-keys
-  "r"   '(ivy-resume :which-key "ivy resume")
-  "f"   '(:ignore t :which-key "files")
-  "ff"  '(counsel-find-file :which-key "open file")
-  "C-f" 'counsel-find-file
-  "fr"  '(counsel-recentf :which-key "recent files")
-  "fR"  '(revert-buffer :which-key "revert file")
-  "fj"  '(counsel-file-jump :which-key "jump to file"))
+;; Spell checking that is fast enough to leave on while you write. Needs a
+;; dictionary: `sudo pacman -S hunspell-en_us' -- activates once one exists.
+(use-package jinx
+  :straight t
+  :if (or (file-directory-p "/usr/share/hunspell")
+          (file-directory-p "/usr/share/myspell/dicts"))
+  :hook (org-mode . jinx-mode)
+  :bind (("M-$" . jinx-correct)
+         ("C-M-$" . jinx-languages)))
 
 ;; COMPLETION SYSTEM -----------------------
-;; Trying this as an alternative to Ivy and Counsel
+;; One stack, all by the same family of small packages that build on Emacs'
+;; own completion API: vertico (UI) + orderless (matching) + marginalia
+;; (annotations) + consult (commands) + embark (actions) + corfu/cape
+;; (in-buffer popups). The old ivy/counsel stack is gone -- both were loaded
+;; at the same time before and fought over the minibuffer.
 
 ;; Preserve Minibuffer History with savehist-mode
 (use-package savehist
+  :straight nil
   :config
-  (setq history-length 25)
+  (setq history-length 100)
   (savehist-mode 1))
+
+(use-package wgrep)   ; edit ripgrep results in place (embark-export, then C-c C-p)
 
 ;; Completions with Vertico
 (defun jd/minibuffer-backward-kill (arg)
@@ -579,6 +575,7 @@ folder, otherwise delete a word"
   :custom-face
   (vertico-current ((t (:background "#3a3f5a"))))
   :init
+  (setq enable-recursive-minibuffers t)
   (vertico-mode))
 
 ;; Completions in Regions with Corfu
@@ -592,42 +589,92 @@ folder, otherwise delete a word"
               ("C-f" . corfu-insert))
   :custom
   (corfu-cycle t)
+  (corfu-auto-delay 0.2)
+  (corfu-auto-prefix 2)
+  (corfu-popupinfo-delay '(0.5 . 0.2))
   :config
-  (global-corfu-mode))
+  (global-corfu-mode)
+  (corfu-history-mode 1)            ; most-used candidates float to the top
+  (corfu-popupinfo-mode 1)          ; docs popup next to the candidate
+  (add-to-list 'savehist-additional-variables 'corfu-history)
+  ;; Pop up automatically while coding, but NOT while writing prose in org --
+  ;; there you trigger it yourself with C-M-i (or type [[ for note links).
+  (add-hook 'prog-mode-hook (lambda () (setq-local corfu-auto t))))
+
+;; Extra completion sources for corfu: file paths and words from open buffers.
+(use-package cape
+  :straight t
+  :init
+  (add-hook 'completion-at-point-functions #'cape-file)
+  (add-hook 'completion-at-point-functions #'cape-dabbrev 90))
+
+(use-package nerd-icons-corfu
+  :straight t
+  :after corfu
+  :config
+  (add-to-list 'corfu-margin-formatters #'nerd-icons-corfu-formatter))
 
 ;; Improved Candidate Filtering with Orderless
 (use-package orderless
   :straight t
   :init
-  (setq completion-styles '(orderless)
+  (setq completion-styles '(orderless basic)
         completion-category-defaults nil
         completion-category-overrides '((file (styles . (partial-completion))))))
-
-;; Consult Commands
-(defun jd/get-project-root ()
-  (when-let ((proj (project-current)))
-    (project-root proj)))
 
 (use-package consult
   :straight t
   :demand t
   :bind (("C-s" . consult-line)
          ("C-M-l" . consult-imenu)
-         ("C-M-j" . persp-switch-to-buffer*)
+         ("C-M-j" . consult-buffer)
+         ("C-x b" . consult-buffer)
+         ("M-y" . consult-yank-pop)
          :map minibuffer-local-map
          ("C-r" . consult-history))
   :custom
-  (consult-project-root-function #'jd/get-project-root)
-  (completion-in-region-function #'consult-completion-in-region))
+  (completion-in-region-function #'consult-completion-in-region)
+  :config
+  ;; Preview themes/files/buffers only when asked (M-.), not on every keystroke
+  (consult-customize
+   consult-theme :preview-key '(:debounce 0.4 any)
+   consult-ripgrep consult-recent-file consult-bookmark consult-buffer
+   :preview-key "M-."))
 
 ;; Completion Annotations with Marginalia
 (use-package marginalia
   :after vertico
   :straight t
-  :custom
-  (marginalia-annotators '(marginalia-annotators-heavy marginalia-annotators-light nil))
   :init
   (marginalia-mode))
+
+(use-package nerd-icons-completion
+  :straight t
+  :after marginalia
+  :hook (marginalia-mode . nerd-icons-completion-marginalia-setup)
+  :config
+  (nerd-icons-completion-mode))
+
+;; Embark: "right-click" for anything in the minibuffer or under point.
+;; C-. on a candidate/link/file/heading shows every action you can take on it.
+;; In a search (SPC /, SPC n s) press C-. then E to export results into a
+;; buffer you can edit with wgrep.
+(use-package embark
+  :straight t
+  :commands (embark-act embark-dwim embark-prefix-help-command)
+  :init
+  (setq prefix-help-command #'embark-prefix-help-command)
+  (general-define-key :states '(normal insert visual emacs motion)
+                      "C-." #'embark-act
+                      "C-;" #'embark-dwim)
+  (general-define-key :keymaps 'minibuffer-local-map
+                      "C-." #'embark-act
+                      "C-;" #'embark-dwim))
+
+(use-package embark-consult
+  :straight t
+  :after (embark consult)
+  :hook (embark-collect-mode . consult-preview-at-point-mode))
 
 ;; WINDOW MANAGEMENT -----------------------
 (use-package default-text-scale
@@ -647,7 +694,9 @@ folder, otherwise delete a word"
 
 ;; FILE BROWSING -----------------------
 ;; Dired
-(use-package all-the-icons-dired)
+(use-package nerd-icons-dired
+  :straight t
+  :hook (dired-mode . nerd-icons-dired-mode))
 
 (use-package dired
   :straight nil
@@ -658,21 +707,16 @@ folder, otherwise delete a word"
         dired-omit-files "^\\.[^.].*"
         dired-omit-verbose nil
         dired-hide-details-hide-symlink-targets nil
+        dired-dwim-target t
         delete-by-moving-to-trash t)
 
   (autoload 'dired-omit-mode "dired-x")
-
-  (add-hook 'dired-load-hook
-            (lambda ()
-              (interactive)
-              (dired-collapse)))
 
   (add-hook 'dired-mode-hook
             (lambda ()
               (interactive)
               (dired-omit-mode 1)
               (dired-hide-details-mode 1)
-              (all-the-icons-dired-mode 1)
               (hl-line-mode 1)))
 
   (use-package dired-rainbow
@@ -706,7 +750,7 @@ folder, otherwise delete a word"
     :defer t)
 
   (use-package dired-collapse
-    :defer t)
+    :hook (dired-mode . dired-collapse-mode))
 
   (evil-collection-define-key 'normal 'dired-mode-map
     "h" 'dired-single-up-directory
@@ -717,6 +761,8 @@ folder, otherwise delete a word"
     "p" 'dired-ranger-paste))
 
 ;; Opening Files Externally
+;; Images now open inside Emacs (it renders them natively, and that's where
+;; your notes are). Video goes to mpv, PDFs to your desktop's default viewer.
 (use-package openwith
   :config
   (setq openwith-associations
@@ -724,21 +770,45 @@ folder, otherwise delete a word"
          (list (openwith-make-extension-regexp
                 '("mpg" "mpeg" "mp3" "mp4"
                   "avi" "wmv" "wav" "mov" "flv"
-                  "ogm" "ogg" "mkv"))
+                  "ogm" "ogg" "mkv" "webm"))
                "mpv"
                '(file))
          (list (openwith-make-extension-regexp
-                '("xbm" "pbm" "pgm" "ppm" "pnm"
-                  "png" "gif" "bmp" "tif" "jpeg" "jpg"))
-               "sxiv"
-               '(file))
-         (list (openwith-make-extension-regexp
                 '("pdf"))
-               "zathura"
-               '(file)))))
+               "xdg-open"
+               '(file))))
+  (openwith-mode 1))
 
 ;; ORG MODE -----------------------
-;; Org Configuration
+;; Directory layout (created fresh in ~/org):
+;;
+;;   ~/org/start-here.org   the guide to this whole workflow -- read it first
+;;   ~/org/inbox.org        everything lands here first (SPC x i)
+;;   ~/org/tasks.org        Projects / Tasks / Calendar / Habits
+;;   ~/org/notes/           permanent notes, one file per idea (org-roam)
+;;   ~/org/journal/         one file per day (org-roam dailies)
+;;   ~/org/archive/         finished work, moved out of the way (SPC o A)
+;;
+;; Only inbox.org and tasks.org feed the agenda; notes and journal are your
+;; knowledge base and are reached through org-roam (SPC n ...).
+(setq org-directory (expand-file-name "~/org/"))
+(defvar jd/org-inbox-file (expand-file-name "inbox.org" org-directory))
+(defvar jd/org-tasks-file (expand-file-name "tasks.org" org-directory))
+(defvar jd/org-start-file (expand-file-name "start-here.org" org-directory))
+
+(defun jd/org-open-inbox () (interactive) (find-file jd/org-inbox-file))
+(defun jd/org-open-tasks () (interactive) (find-file jd/org-tasks-file))
+(defun jd/org-open-start-here () (interactive) (find-file jd/org-start-file))
+
+(defun jd/org-dashboard ()
+  "Open the daily dashboard agenda directly."
+  (interactive)
+  (org-agenda nil "d"))
+
+(defun jd/search-org-files ()
+  "Ripgrep through every file in `org-directory'."
+  (interactive)
+  (consult-ripgrep org-directory))
 
 ;; TODO: Mode this to another section
 (setq-default fill-column 125)
@@ -767,7 +837,45 @@ point is on that headline."
   (setq-local hl-line-range-function #'jd/org-hl-line-range)
   (diminish org-indent-mode))
 
-;; (global-set-key (kbd "C-c t") (lambda () (interactive) (find-file "~/org/tasks.org")))
+;; AUTOSAVE NOTES (like Notion) -----------------------
+;; Org buffers save themselves after 5 idle seconds, so you never lose a
+;; thought. Limited to org files on purpose: code buffers still save only when
+;; you say so (saving code triggers the prettier formatter).
+(setq auto-save-visited-interval 5
+      auto-save-visited-predicate (lambda () (derived-mode-p 'org-mode)))
+(auto-save-visited-mode 1)
+
+;; JOURNAL PROMPTS -----------------------
+;; Morning questions — one per ISO day-of-week
+(defvar my/stoic-morning-questions
+  '((1 . "What today lies within my power, and what must I simply accept?")
+    (2 . "Which virtue — courage, justice, temperance, wisdom — needs my attention today?")
+    (3 . "What difficulty do I expect today, and how can I turn it to my advantage?")
+    (4 . "If I imagine my life ending tonight, how would that change how I show up today?")
+    (5 . "What would it look like to welcome whatever happens today, rather than resist it?")
+    (6 . "What burden — grudge, regret, expectation — can I set down before the day begins?")
+    (7 . "What pattern from this past week do I want to interrupt or reinforce going forward?")))
+
+;; Evening questions — one per ISO day-of-week
+(defvar my/stoic-evening-questions
+  '((1 . "Where did I act from judgment today, and where did I simply react?")
+    (2 . "Did I live out the virtue I chose this morning? What tested it?")
+    (3 . "Looking back, did the obstacle I faced turn out smaller or larger than I feared?")
+    (4 . "If today had been my last, would I be at peace with how I spent it?")
+    (5 . "Was there a moment today I fought against something I couldn't change?")
+    (6 . "What did I release today that I'm better off without?")
+    (7 . "What is the one lesson from this week I don't want to have to learn again?")))
+
+(defun my/stoic-question (list)
+  "Return today's question from LIST based on ISO day-of-week."
+  (let ((day (string-to-number (format-time-string "%u"))))
+    (cdr (assoc day list))))
+
+(defun my/stoic-morning-question ()
+  (my/stoic-question my/stoic-morning-questions))
+
+(defun my/stoic-evening-question ()
+  (my/stoic-question my/stoic-evening-questions))
 
 ;; Declarative keyword syntax for org-capture-templates -- loaded before org
 ;; itself since org's :config below builds org-capture-templates with it.
@@ -788,20 +896,23 @@ point is on that headline."
         org-hide-block-startup nil
         org-src-preserve-indentation nil
         org-startup-folded 'show3levels
-        org-cycle-separator-lines 2)
+        org-cycle-separator-lines 2
+        org-startup-with-inline-images t
+        org-image-actual-width '(600))
   (setq org-agenda-start-with-log-mode t)
   (setq org-log-done 'time)
   (setq org-log-into-drawer t)
   (setq org-agenda-start-on-weekday 0)
 
-  ;; CLOCKING -- billable time against client/project tasks. Persist across
-  ;; restarts, and auto-flip a clocked-in task to IN-PROGRESS since that's
-  ;; already a state in org-todo-keywords below.
+  ;; CLOCKING -- see where your time actually goes. Persist across restarts,
+  ;; and auto-flip a clocked-in task to IN-PROGRESS.
   (setq org-clock-persist t)
   (setq org-clock-in-switch-to-state "IN-PROGRESS")
   (setq org-clock-out-remove-zero-time-clocks t)
   (org-clock-persistence-insinuate)
 
+  ;; Tasks use the first sequence. Projects (level-2 headings under
+  ;; "* Projects" in tasks.org, tagged :project:) use the second.
   (setq org-todo-keywords
         '((sequence
            "TODO(t)"
@@ -843,41 +954,38 @@ point is on that headline."
           ("HOLD"        . (:background "#bb9af7" :foreground "#1a1b26" :distant-foreground "#c0caf5" :weight bold))
           ("COMPLETED"   . (:background "#9ece6a" :foreground "#1a1b26" :distant-foreground "#c0caf5" :weight bold))))
 
-  (defun jd/org-agenda-format-project (txt)
-    "Append the PROJECT property of the task to the agenda item."
-    (let ((proj (org-entry-get (get-text-property 0 'org-hd-marker txt) "PROJECT")))
-      (if proj
-          (concat txt " (" proj ")")
-        txt)))
-
-  (setq org-directory "~/org/")
-  (setq org-agenda-files
-        (append
-         (mapcar (lambda (f) (concat org-directory f))
-                 '("bills.org" "calendar.org" "clients.org" "inbox.org"
-                   "meetings.org" "notes.org" "projects.org" "tasks.org"))))
+  (setq org-agenda-files (list jd/org-inbox-file jd/org-tasks-file))
 
   (setq org-agenda-prefix-format
         '((todo . "  %?-12t %s")    ;; leave default formatting
           (agenda . " %?-12t %s")))
 
+  ;; A project is "stuck" when it has no NEXT/IN-PROGRESS action under it.
+  (setq org-stuck-projects
+        '("+project+LEVEL=2-TODO=\"COMPLETED\"-TODO=\"HOLD\"" ("NEXT" "IN-PROGRESS") nil ""))
+  (setq org-tags-exclude-from-inheritance '("project" "crypt"))
+
   (setq org-agenda-custom-commands
-        '(
-          ("d" "Dashboard"
+        `(("d" "Dashboard"
            ((agenda ""
-                    ((org-agenda-span 7)
+                    ((org-agenda-span 1)
                      (org-agenda-start-on-weekday nil)
                      (org-agenda-sorting-strategy
-                      '(deadline-up priority-down time-up))
-                     (org-deadline-warning-days 2)
+                      '(time-up deadline-up priority-down))
+                     (org-deadline-warning-days 3)
                      (org-agenda-overriding-header
-                      "Deadlines & Scheduled\n")))
+                      "TODAY\n")))
+            (tags "LEVEL=1"
+                  ((org-agenda-files (list ,jd/org-inbox-file))
+                   (org-agenda-overriding-header
+                    "\nINBOX — process me (SPC o r to refile)\n")))
             (todo "NEXT|IN-PROGRESS"
                   ((org-agenda-overriding-header
                     "\nIN FLIGHT — Next & In Progress\n")
                    (org-agenda-sorting-strategy '(priority-down deadline-up))))
             (todo "TODO"
-                  ((org-agenda-skip-function
+                  ((org-agenda-files (list ,jd/org-tasks-file))
+                   (org-agenda-skip-function
                     '(org-agenda-skip-entry-if 'scheduled 'deadline))
                    (org-agenda-sorting-strategy '(priority-down effort-up))
                    (org-agenda-max-entries 8)
@@ -885,10 +993,18 @@ point is on that headline."
                     "\nUNSCHEDULED — Priority Pool (top 8)\n")))
             (todo "WAIT"
                   ((org-agenda-overriding-header
-                    "\nWAITING ON SOMEONE\n")))
-            (todo "REVIEW"
+                    "\nWAITING ON SOMEONE\n")))))
+
+          ("w" "Week Ahead"
+           ((agenda ""
+                    ((org-agenda-span 7)
+                     (org-agenda-start-on-weekday nil)
+                     (org-agenda-sorting-strategy '(deadline-up priority-down))
+                     (org-agenda-overriding-header
+                      "NEXT 7 DAYS\n")))
+            (todo "NEXT"
                   ((org-agenda-overriding-header
-                    "\nNEEDS REVIEW\n")))))
+                    "\nNEXT Actions across all projects\n")))))
 
           ("o" "Overdue & At Risk"
            ((agenda ""
@@ -900,29 +1016,51 @@ point is on that headline."
                      (org-agenda-overriding-header
                       "OVERDUE + DUE IN 3 DAYS\n")))))
 
-          ("w" "Week Ahead"
-           ((agenda ""
-                    ((org-agenda-span 7)
-                     (org-agenda-sorting-strategy '(deadline-up priority-down))
-                     (org-agenda-overriding-header
-                      "NEXT 7 DAYS\n")))
-            (todo "NEXT"
-                  ((org-agenda-overriding-header
-                    "\nNEXT Actions across all projects\n")))))
-
           ("p" "By Project"
            ((alltodo ""
                      ((org-agenda-overriding-header "")
                       (org-super-agenda-groups
                        '((:name "In Flight" :todo ("NEXT" "IN-PROGRESS"))
                          (:name "Waiting / Review" :todo ("WAIT" "REVIEW"))
-                         (:auto-property "PROJECT")
-                         (:name "No Project" :anything t)))))))))
+                         (:name "Inbox (unsorted)" :file-path "inbox\\.org")
+                         (:auto-parent t)))))))
 
+          ("r" "Weekly Review"
+           ((agenda ""
+                    ((org-agenda-span 7)
+                     (org-agenda-start-day "-6d")
+                     (org-agenda-start-on-weekday nil)
+                     (org-agenda-overriding-header
+                      "LAST 7 DAYS — what got done / clocked\n")))
+            (tags "LEVEL=1"
+                  ((org-agenda-files (list ,jd/org-inbox-file))
+                   (org-agenda-overriding-header
+                    "\nINBOX — get this to zero\n")))
+            (stuck ""
+                   ((org-agenda-overriding-header
+                     "\nSTUCK PROJECTS — give each a NEXT action\n")))
+            (todo "WAIT|HOLD"
+                  ((org-agenda-overriding-header
+                    "\nWAITING / ON HOLD — still true?\n"))))
+           ((org-agenda-start-with-log-mode t)
+            (org-agenda-log-mode-items '(closed clock state))
+            (org-agenda-archives-mode t)))))
+
+  ;; org-bookmark was dropped: it isn't part of current Org and threw an
+  ;; error at every startup.
   (setq org-modules
         '(org-crypt
-          org-habit
-          org-bookmark))
+          org-habit))
+
+  ;; Encrypt any heading tagged :crypt: with gpg on save (symmetric -- you
+  ;; pick a passphrase). Decrypt with M-x org-decrypt-entry. For passwords,
+  ;; private journal entries, etc. -- things you'd have locked in Notion.
+  (require 'org-crypt)
+  (setq org-crypt-key nil)
+  (org-crypt-use-before-save-magic)
+
+  ;; Finished subtrees go to ~/org/archive/<file>_archive, out of the agenda.
+  (setq org-archive-location (concat org-directory "archive/%s_archive::"))
 
   (setq org-refile-targets '((nil :maxlevel . 3)
                              (org-agenda-files :maxlevel . 3)))
@@ -931,105 +1069,33 @@ point is on that headline."
   (setq org-refile-allow-creating-parent-nodes 'confirm)
   (setq org-outline-path-complete-in-steps nil)
 
-  ;; Morning questions — one per ISO day-of-week
-  (defvar my/stoic-morning-questions
-    '((1 . "What today lies within my power, and what must I simply accept?")
-      (2 . "Which virtue — courage, justice, temperance, wisdom — needs my attention today?")
-      (3 . "What difficulty do I expect today, and how can I turn it to my advantage?")
-      (4 . "If I imagine my life ending tonight, how would that change how I show up today?")
-      (5 . "What would it look like to welcome whatever happens today, rather than resist it?")
-      (6 . "What burden — grudge, regret, expectation — can I set down before the day begins?")
-      (7 . "What pattern from this past week do I want to interrupt or reinforce going forward?")))
-
-  ;; Evening questions — one per ISO day-of-week
-  (defvar my/stoic-evening-questions
-    '((1 . "Where did I act from judgment today, and where did I simply react?")
-      (2 . "Did I live out the virtue I chose this morning? What tested it?")
-      (3 . "Looking back, did the obstacle I faced turn out smaller or larger than I feared?")
-      (4 . "If today had been my last, would I be at peace with how I spent it?")
-      (5 . "Was there a moment today I fought against something I couldn't change?")
-      (6 . "What did I release today that I'm better off without?")
-      (7 . "What is the one lesson from this week I don't want to have to learn again?")))
-
-  (defun my/stoic-question (list)
-    "Return today's question from LIST based on ISO day-of-week."
-    (let ((day (string-to-number (format-time-string "%u"))))
-      (cdr (assoc day list))))
-
-  (defun my/stoic-morning-question ()
-    (my/stoic-question my/stoic-morning-questions))
-
-  (defun my/stoic-evening-question ()
-    (my/stoic-question my/stoic-evening-questions))
-
-  (defun my/journal-date-headline ()
-    "Return today's date heading, e.g. 2026-08-13 Thursday."
-    (format-time-string "%Y-%m-%d %A"))
-
-  ;; doct's :headline only accepts a literal string, not a function call, so
-  ;; a dynamic "today's date" heading has to go through :function instead --
-  ;; this replicates the search-or-create logic Org's own file+headline uses.
-  (defun jd/journal-goto-date-heading ()
-    (goto-char (point-min))
-    (let ((headline (my/journal-date-headline)))
-      (if (re-search-forward (format org-complex-heading-regexp-format
-                                     (regexp-quote headline))
-                             nil t)
-          (forward-line 0)
-        (goto-char (point-max))
-        (unless (bolp) (insert "\n"))
-        (insert "* " headline "\n")
-        (forward-line -1))))
-
+  ;; Capture templates -- SPC x, then a key. Everything is fast to file and
+  ;; asks as little as possible; sorting happens later from the inbox.
   (setq org-capture-templates
-        (doct '(("Inbox" :keys "i"
-                 :file "~/org/inbox.org"
-                 :template "* TODO %?\n  Captured: %U\n  %a"
-                 :empty-lines 1)
-                ("Client" :keys "c"
-                 :file "~/org/clients.org"
-                 :template ("* %^{Client}"
-                            "** Active Tasks"
-                            "** Bugs"
-                            "** Feature Requests"
-                            "** Waiting/Blocked"
-                            "** Invoices & Billing"
-                            "*** Time Log"
-                            "#+BEGIN: clocktable :scope tree1 :maxlevel 3 :fileskip0 t"
-                            "#+END:"
-                            "** Done/Archive"
-                            ""))
-                ("Notes" :keys "n"
-                 :file "~/org/notes.org"
-                 :headline "Inbox"
-                 :template "* [%<%Y-%m-%d %a>] %^{Title}\n:PROPERTIES:\n:CREATED: %U\n:END:\n%?"
-                 :empty-lines 1)
-                ("Bills" :keys "b"
-                 :file "~/org/bills.org"
-                 :template "* TODO %^{New Bill}\nDEADLINE: %^{DEADLINE}T\n:PROPERTIES:\n:CREATED: %U\n:END:\n%?")
-                ("Event" :keys "e"
-                 :file "~/org/calendar.org"
-                 :headline "Events"
-                 :template "* %^{Event}\nSCHEDULED: %^{SCHEDULED}T\n:PROPERTIES:\n:CREATED: %U\n:CONTACT:\n:END:\n%?")
+        (doct `(("Inbox (anything)" :keys "i"
+                 :file ,jd/org-inbox-file
+                 :template "* TODO %?\n:PROPERTIES:\n:CREATED: %U\n:END:\n%i"
+                 :empty-lines-after 1)
+                ("Inbox + link to here" :keys "l"
+                 :file ,jd/org-inbox-file
+                 :template "* TODO %?\n:PROPERTIES:\n:CREATED: %U\n:END:\n%a\n%i"
+                 :empty-lines-after 1)
+                ("Task (scheduled)" :keys "t"
+                 :file ,jd/org-tasks-file
+                 :headline "Tasks"
+                 :template "* TODO %^{Task}\nSCHEDULED: %^{Scheduled}t\n:PROPERTIES:\n:CREATED: %U\n:END:\n%?")
                 ("Deadline" :keys "d"
-                 :file "~/org/calendar.org"
-                 :headline "Deadlines"
-                 :template "* TODO %^{Task}\nDEADLINE: %^{Deadline}T\n:PROPERTIES:\n:CREATED: %U\n:END:\n%?")
-                ("Meeting" :keys "m"
-                 :file "meetings.org"
-                 :template "* TODO %^{Meeting}\nSCHEDULED: <%^{Date}>\n%?"
-                 :unnarrowed t)
-                ("Journal" :keys "j"
-                 :file "~/org/journal.org"
-                 :children
-                 (("Morning Reflection" :keys "m"
-                   :function jd/journal-goto-date-heading
-                   :template "* Morning Reflection - %<%I:%M %p>\n%(my/stoic-morning-question)\n\n%?"
-                   :empty-lines 1)
-                  ("Evening Reflection" :keys "e"
-                   :function jd/journal-goto-date-heading
-                   :template "* Evening Reflection - %<%I:%M %p>\n%(my/stoic-evening-question)\n\n%?"
-                   :empty-lines 1))))))
+                 :file ,jd/org-tasks-file
+                 :headline "Tasks"
+                 :template "* TODO %^{Task}\nDEADLINE: %^{Deadline}t\n:PROPERTIES:\n:CREATED: %U\n:END:\n%?")
+                ("Event / appointment" :keys "e"
+                 :file ,jd/org-tasks-file
+                 :headline "Calendar"
+                 :template "* %^{Event}\n%^{When}T\n:PROPERTIES:\n:CREATED: %U\n:END:\n%?")
+                ("Project" :keys "p"
+                 :file ,jd/org-tasks-file
+                 :headline "Projects"
+                 :template "* PLANNED %^{Project} [/] :project:\n:PROPERTIES:\n:CREATED: %U\n:END:\n%^{Why does this matter / what does done look like?}\n** NEXT %^{First concrete step}"))))
 
   (evil-define-key '(normal insert visual) org-mode-map (kbd "C-j") 'org-next-visible-heading)
   (evil-define-key '(normal insert visual) org-mode-map (kbd "C-k") 'org-previous-visible-heading)
@@ -1039,27 +1105,22 @@ point is on that headline."
 
   ;; "t" (evil-org's todo keytheme) still cycles/prompts through every TODO
   ;; state. RET is an extra shortcut that only ever marks the heading DONE,
-  ;; and otherwise behaves like normal RET.
+  ;; on a link it opens the link, and otherwise behaves like normal RET.
   (defun jd/org-return-or-todo-done ()
     (interactive)
-    (if (org-at-heading-p)
-        (org-todo "DONE")
-      (call-interactively 'evil-ret)))
+    (cond ((org-in-regexp org-link-any-re) (org-open-at-point))
+          ((org-at-heading-p) (org-todo "DONE"))
+          (t (call-interactively 'evil-ret))))
   (evil-define-key 'normal org-mode-map (kbd "RET") 'jd/org-return-or-todo-done)
 
   (org-babel-do-load-languages
    'org-babel-load-languages
-   '((emacs-lisp . t)))
+   '((emacs-lisp . t)
+     (shell . t)
+     (js . t)
+     (sql . t)))
 
   (push '("conf-unix" . conf-unix) org-src-lang-modes)
-
-  ;; Fonts and Bullets
-  ;; (use-package org-superstar
-  ;;   :after org
-  ;;   :hook (org-mode . org-superstar-mode)
-  ;;   :custom
-  ;;   (org-superstar-remove-leading-stars t)
-  ;;   (org-superstar-headline-bullets-list '("◉" "○" "●" "○" "●" "○" "●")))
 
   ;; Increase the size of various headings
   (set-face-attribute 'org-document-title nil :font "JetBrains Mono Nerd Font" :weight 'bold :height 1.0)
@@ -1077,7 +1138,7 @@ point is on that headline."
   (require 'org-indent)
 
   ;; Ensure that anything that should be fixed-pitch in Org files appears that way
-  (set-face-attribute 'org-block nil :foreground nil :inherit 'fixed-pitch)
+  (set-face-attribute 'org-block nil :foreground 'unspecified :inherit 'fixed-pitch)
   (set-face-attribute 'org-table nil  :inherit 'fixed-pitch)
   (set-face-attribute 'org-formula nil  :inherit 'fixed-pitch)
   (set-face-attribute 'org-code nil   :inherit '(shadow fixed-pitch))
@@ -1089,27 +1150,22 @@ point is on that headline."
   (jd/org-block-padding-refresh)
 
   ;; The org-modern checked-box glyph (a checkmark inside a small box) doesn't
-  ;; render legibly at normal text size in some fonts. Strike through the
-  ;; item's text instead so "done" is obvious regardless of how the box glyph
-  ;; itself looks.
+  ;; render legibly at normal text size in some fonts. Fade the item's text
+  ;; instead (see `jd/org-checkbox-done-text') so "done" is obvious regardless
+  ;; of how the box glyph itself looks.
   (font-lock-add-keywords
    'org-mode
    '(("^[ \t]*\\(?:[-+*]\\|[0-9]+[.)]\\)[ \t]+\\[X\\][ \t]+\\(.*\\)$"
-      (1 '(:strike-through t :foreground "#565f89") append))))
+      (1 'jd/org-checkbox-done-text append))))
 
   ;; Get rid of the background on column views
-  (set-face-attribute 'org-column nil :background nil)
-  (set-face-attribute 'org-column-title nil :background nil)
+  (set-face-attribute 'org-column nil :background 'unspecified)
+  (set-face-attribute 'org-column-title nil :background 'unspecified)
 
   ;; Block Templates
   ;; This is needed as of Org 9.2
   (require 'org-tempo)
   (add-to-list 'org-structure-template-alist '("src" . "src"))
-
-  ;; Searching
-  (defun jd/search-org-files ()
-    (interactive)
-    (counsel-rg "" "~/org" nil "Search: "))
 
   ;; Bindings
   (use-package evil-org
@@ -1164,8 +1220,8 @@ point is on that headline."
 ;; org-present
 (defun jd/org-present-prepare-slide ()
   (org-overview)
-  (org-show-entry)
-  (org-show-children))
+  (org-fold-show-entry)
+  (org-fold-show-children))
 
 (defun jd/org-present-hook ()
   (setq-local face-remapping-alist '((default (:height 1.5) variable-pitch)
@@ -1201,27 +1257,51 @@ point is on that headline."
   :hook ((org-present-mode . jd/org-present-hook)
          (org-present-mode-quit . jd/org-present-quit-hook)))
 
-;; ORG ROAM -----------------------
+;; ORG ROAM (your notes -- the Notion replacement) -----------------------
+;; One small file per idea in ~/org/notes/, linked by stable IDs, so renaming
+;; or moving a note never breaks a link. The backlinks panel (SPC n l) is
+;; Notion's "linked mentions", but it works across your whole archive.
 (use-package org-roam
   :straight t
   :custom
-  (org-roam-directory "~/org/")
-  (org-roam-completion-everywhere t)
+  (org-roam-directory (file-truename org-directory))
+  (org-roam-dailies-directory "journal/")
+  ;; Only suggest note links after typing [[ (or C-M-i), not on every word.
+  (org-roam-completion-everywhere nil)
+  (org-roam-node-display-template
+   (concat "${title:*} " (propertize "${tags:30}" 'face 'org-tag)))
 
   (org-roam-capture-templates
-   '(
-     ("d" "Default" plain
+   '(("d" "Note" plain
       "%?"
-      :if-new (file+head "notes/${slug}.org"
-                         "#+title: ${title}\n#+date: %U\n\n")
+      :target (file+head "notes/${slug}.org"
+                         "#+title: ${title}\n#+created: %U\n#+filetags:\n\n")
       :unnarrowed t)
 
-     ("i" "Inbox" entry
-      "* TODO %^{Task}\t%^G\n%?"
-      :target (file "inbox.org")
+     ("r" "Reference (book / article / video / course)" plain
+      "* Summary\n%?\n\n* Key ideas\n\n* My thoughts\n"
+      :target (file+head "notes/${slug}.org"
+                         ":PROPERTIES:\n:AUTHOR: %^{Author}\n:SOURCE: %^{Link or ISBN}\n:STATUS: %^{Status|reading|done|to-read}\n:END:\n#+title: ${title}\n#+created: %U\n#+filetags: :reference:\n\n")
+      :unnarrowed t)
+
+     ("t" "Topic hub (index of related notes)" plain
+      "* Notes\n%?\n\n* Open questions\n"
+      :target (file+head "notes/${slug}.org"
+                         "#+title: ${title}\n#+created: %U\n#+filetags: :hub:\n\n")
       :unnarrowed t)))
 
-  (org-roam-dailies-directory "~/org/journal/")
+  ;; Daily journal -- SPC n d c, then pick one. File: ~/org/journal/YYYY-MM-DD.org
+  (org-roam-dailies-capture-templates
+   (let ((head "#+title: %<%Y-%m-%d %A>\n#+filetags: :journal:\n"))
+     `(("d" "Log entry" entry
+        "* %<%I:%M %p> %?"
+        :target (file+head "%<%Y-%m-%d>.org" ,head))
+       ("m" "Morning reflection" entry
+        "* Morning reflection — %<%I:%M %p>\n/%(my/stoic-morning-question)/\n\n%?"
+        :target (file+head "%<%Y-%m-%d>.org" ,head))
+       ("e" "Evening reflection" entry
+        "* Evening reflection — %<%I:%M %p>\n/%(my/stoic-evening-question)/\n\n%?"
+        :target (file+head "%<%Y-%m-%d>.org" ,head)))))
 
   :bind (("C-c n l" . org-roam-buffer-toggle)
          ("C-c n f" . org-roam-node-find)
@@ -1236,13 +1316,47 @@ point is on that headline."
   ("C-c n d" . org-roam-dailies-map)
   :config
   (require 'org-roam-dailies)
-  (org-roam-db-autosync-enable))
+  (dolist (dir '("notes" "journal" "archive"))
+    (make-directory (expand-file-name dir org-roam-directory) t))
+  (org-roam-db-autosync-mode 1))
+
+;; Live-preview while picking notes, plus full-text search & backlink jumping
+;; through consult (SPC n s, SPC n b).
+(use-package consult-org-roam
+  :straight t
+  :after org-roam
+  :diminish consult-org-roam-mode
+  :custom
+  (consult-org-roam-grep-func #'consult-ripgrep)
+  (consult-org-roam-buffer-narrow-key ?r)
+  :config
+  (consult-org-roam-mode 1)
+  (consult-customize
+   org-roam-node-find org-roam-node-insert
+   :preview-key "M-."))
+
+;; QUERIES (Notion "database views", but over plain text) -----------------------
+;; org-ql searches every heading in ~/org by todo state, tag, property, date,
+;; text... SPC n q prompts for a query, e.g.:
+;;   todo:NEXT                       all next actions
+;;   tags:reference property:STATUS=reading   books you're reading
+;;   todo: deadline:to=7             anything due in the next week
+;;   closed:on=-7 ...                done in the last week
+;;   "some words" tags:idea          ideas mentioning some words
+;; In the results buffer press `v' to save it as a named view.
+(use-package org-ql
+  :straight t
+  :after org
+  :commands (org-ql-search org-ql-view))
+
+(defun jd/org-ql-search-all (query)
+  "Run org-ql QUERY over every org file under `org-directory'."
+  (interactive (list (read-string "org-ql query: " nil 'jd/org-ql-history)))
+  (org-ql-search (directory-files-recursively org-directory "\\.org\\'") query))
 
 ;; AGENDA GROUPING -----------------------
 ;; Lets agenda views declare `org-super-agenda-groups' to auto-bucket entries
-;; (e.g. by property, tag, or todo state) instead of hand-writing a block per
-;; bucket. The existing Dashboard/Overdue/Week Ahead commands are untouched;
-;; see the new "By Project" ("p") command below for what this buys you.
+;; (e.g. by parent project, tag, or todo state) -- used by "By Project" (p).
 (use-package org-super-agenda
   :after org-agenda
   :config
@@ -1261,24 +1375,113 @@ point is on that headline."
   (org-download-timestamp "%Y%m%d-%H%M%S_"))
 
 ;; TRANSCLUSION -----------------------
-;; Embed a live copy of a heading/section from one org file inside another,
-;; so e.g. a project note can surface a client's open tasks without
-;; duplicating and manually re-syncing the text.
+;; Embed a live copy of a heading/section from one org file inside another
+;; (like Notion's synced blocks), without duplicating the text.
 (use-package org-transclusion
   :after org)
 
-;; Enable auto-archiving on TODO -> DONE
-;; (setq org-archive-location "~/org/archive.org::")
-;; (setq org-archive-mark-done nil) ;; Do not mark again as DONE when archiving
+;; NOTION IMPORT -----------------------
+;; One-time migration: in Notion, Settings -> Export all workspace content ->
+;; Markdown & CSV (include subpages), unzip it, then SPC n I and pick the
+;; folder. Every page becomes an org-roam note in ~/org/notes/notion/ with
+;; its own ID; links between pages become real org-roam links (so backlinks
+;; work), images/attachments are copied to notes/notion/assets/, and
+;; database CSVs become org tables. Runs fully offline. Needs pandoc
+;; (`sudo pacman -S pandoc-cli').
+(require 'url-util)
 
-;; Automatically archive when TODO state changes to DONE
-;; (defun jd/org-auto-archive-done-tasks ()
-;;   "Move DONE tasks from tasks.org to archive.org"
-;;   (when (and (string= (buffer-file-name) (expand-file-name "~/org/tasks.org"))
-;;              (string= org-state "DONE"))
-;;     (org-archive-subtree)))
+(defun jd/notion--clean-title (base)
+  "Strip the 32-char hex id Notion appends to exported file names in BASE."
+  (string-trim (replace-regexp-in-string "[ _-]*[0-9a-f]\\{32\\}\\'" "" base)))
 
-;; (add-hook 'org-after-todo-state-change-hook #'jd/org-auto-archive-done-tasks)
+(defun jd/notion--replace-region (beg end text)
+  "Replace BEG..END with TEXT, leaving point after it."
+  (goto-char beg)
+  (delete-region beg end)
+  (insert text))
+
+(defun jd/notion--rewrite-links (src-dir export-dir assets-dir out-dir pages)
+  "Rewrite file links in the current (pandoc output) buffer.
+Links to other exported pages become id: links via PAGES; links to local
+files are copied under ASSETS-DIR and re-pointed relative to OUT-DIR.
+Relative links are resolved against SRC-DIR, inside EXPORT-DIR."
+  (goto-char (point-min))
+  (while (re-search-forward "\\[\\[\\([^]\n]+\\)\\]" nil t)
+    (let* ((beg (match-beginning 1))
+           (end (match-end 1))
+           (raw (match-string-no-properties 1))
+           (target (url-unhex-string (string-remove-prefix "file:" raw)))
+           (path (and (not (string-match-p "\\`[a-zA-Z][a-zA-Z0-9+.-]*:" target))
+                      (expand-file-name target src-dir)))
+           (page (and path (file-exists-p path)
+                      (gethash (file-truename path) pages))))
+      (cond
+       (page
+        (jd/notion--replace-region beg end (concat "id:" (car page))))
+       ((and path (file-regular-p path))
+        (let ((dest (expand-file-name (file-relative-name path export-dir) assets-dir)))
+          (make-directory (file-name-directory dest) t)
+          (copy-file path dest t)
+          (jd/notion--replace-region beg end (concat "file:" (file-relative-name dest out-dir)))))))))
+
+(defun jd/notion-import (export-dir)
+  "Convert an unzipped Notion Markdown & CSV export in EXPORT-DIR into org-roam notes."
+  (interactive "DUnzipped Notion export folder: ")
+  (unless (executable-find "pandoc")
+    (user-error "pandoc is required: sudo pacman -S pandoc-cli"))
+  (require 'org-roam)
+  (require 'org-id)
+  (let* ((export-dir (file-name-as-directory (expand-file-name export-dir)))
+         (out-dir (expand-file-name "notes/notion/" org-roam-directory))
+         (assets-dir (expand-file-name "assets/" out-dir))
+         (sources (directory-files-recursively export-dir "\\.\\(md\\|csv\\)\\'"))
+         (pages (make-hash-table :test #'equal)) ; source truename -> (id org-file title)
+         (taken (make-hash-table :test #'equal))
+         (coding-system-for-read 'utf-8)
+         (coding-system-for-write 'utf-8)
+         (count 0))
+    (unless sources
+      (user-error "No .md or .csv files under %s -- did you unzip the export?" export-dir))
+    (make-directory out-dir t)
+    ;; Pass 1: assign every page an ID and a unique output file, so pass 2
+    ;; can turn links between pages into id: links.
+    (dolist (src sources)
+      (let* ((title (jd/notion--clean-title (file-name-base src)))
+             (slug (org-roam-node-slug (org-roam-node-create :title title)))
+             (name slug)
+             (n 1))
+        (while (or (gethash name taken)
+                   (file-exists-p (expand-file-name (concat name ".org") out-dir)))
+          (setq n (1+ n)
+                name (format "%s-%d" slug n)))
+        (puthash name t taken)
+        (puthash (file-truename src)
+                 (list (org-id-new) (expand-file-name (concat name ".org") out-dir) title)
+                 pages)))
+    ;; Pass 2: convert.
+    (dolist (src sources)
+      (pcase-let ((`(,id ,org-file ,title) (gethash (file-truename src) pages))
+                  (csv (string-suffix-p ".csv" src)))
+        (with-temp-buffer
+          (let ((status (apply #'call-process "pandoc" nil t nil
+                               (append (if csv
+                                           '("-f" "csv")
+                                         ;; Notion puts the page title in a
+                                         ;; leading "# Title"; shifting levels
+                                         ;; turns it into metadata (dropped,
+                                         ;; since we write #+title ourselves).
+                                         '("-f" "gfm" "--shift-heading-level-by=-1"))
+                                       (list "-t" "org" "--wrap=none" src)))))
+            (unless (eq status 0)
+              (error "pandoc failed on %s: %s" src (buffer-string))))
+          (jd/notion--rewrite-links (file-name-directory src) export-dir assets-dir out-dir pages)
+          (goto-char (point-min))
+          (insert (format ":PROPERTIES:\n:ID:       %s\n:NOTION_SOURCE: %s\n:END:\n#+title: %s\n#+filetags: :notion:\n\n"
+                          id (file-relative-name src export-dir) title))
+          (write-region nil nil org-file nil 'silent)
+          (setq count (1+ count)))))
+    (org-roam-db-sync)
+    (message "Imported %d Notion pages into %s -- try SPC n f" count out-dir)))
 
 ;; DEVELOPMENT -----------------------
 ;; Git
@@ -1433,8 +1636,9 @@ Like a popup terminal buffer instead of vterm taking over the whole view."
   :straight t
   :mode ("\\.env\\..*\\'" "\\.env\\'"))
 
+;; Built into Emacs since 30.
 (use-package editorconfig
-  :straight t
+  :straight nil
   :config
   (editorconfig-mode 1))
 
