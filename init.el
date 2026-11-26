@@ -269,23 +269,53 @@ succession, firing several fs-notify events per switch."
   (setq jd/omarchy-theme-watch-timer
         (run-at-time 0.1 nil #'jd/omarchy-load-theme)))
 
-;; ORG SRC BLOCK PADDING -----------------------
-;; org-block has no left/right padding by default, so code inside a src
-;; block sits flush against the block's edge -- easy to confuse the code's
-;; own leading whitespace/tabs with the block boundary itself. Give the
-;; block faces a box in the same color as their own background, so the box
-;; adds invisible horizontal padding instead of a visible border. Must be
-;; re-applied after every theme load (manual or omarchy-synced), since the
-;; background color is theme-dependent.
-(defun jd/org-block-padding-refresh (&rest _)
-  "Pad org src blocks with an invisible box matching their own background."
-  (dolist (face '(org-block org-block-begin-line org-block-end-line))
-    (when (facep face)
-      (set-face-attribute face nil
-                           :box (list :line-width '(6 . 1)
-                                      :color (or (face-background face nil t)
-                                                 (face-background 'default)))))))
-(advice-add 'load-theme :after #'jd/org-block-padding-refresh)
+;; ORG BLOCK STYLING -----------------------
+;; Code blocks are "cards": a tinted background with invisible padding (a
+;; :box in the block's own color, so code never sits flush against the edge),
+;; a quiet header line showing the language, and no visible #+end_ line.
+;; Quote/verse blocks read as prose instead of code: no slab, normal text
+;; color, italic, framed only by org-modern-indent's left bracket.
+;; Every color is theme-dependent, so this re-runs after each theme load
+;; (manual or omarchy-synced).
+(defface jd/org-src-lang '((t :weight bold))
+  "Face for the language name on a #+begin_src line.")
+
+(defface jd/org-quote-mark '((t :height 1.6))
+  "Face for the opening quote mark shown on #+begin_quote lines.")
+
+(defface jd/org-quote-delimiter '((t))
+  "Face for #+begin_quote/#+end_quote lines: clears the block background.")
+
+(defun jd/org-blocks-style-refresh (&rest _)
+  "Restyle org code and quote block faces for the current theme."
+  (when (facep 'org-block)
+    (let* ((bg (face-background 'default nil t))
+           (block-bg (or (face-background 'org-block nil t) bg))
+           (muted (or (face-foreground 'font-lock-comment-face nil t)
+                      (face-foreground 'shadow nil t)))
+           (accent (or (face-foreground 'font-lock-keyword-face nil t)
+                       (face-foreground 'default nil t))))
+      ;; Code cards
+      (dolist (face '(org-block org-block-begin-line org-block-end-line))
+        (set-face-attribute face nil
+                            :background block-bg :extend t
+                            :box (list :line-width '(8 . 2) :color block-bg)))
+      (dolist (face '(org-block-begin-line org-block-end-line))
+        (set-face-attribute face nil :foreground muted :slant 'normal
+                            :underline nil :overline nil
+                            :inherit 'fixed-pitch :height 0.85))
+      (set-face-attribute 'jd/org-src-lang nil :foreground accent)
+      (set-face-attribute 'jd/org-quote-mark nil :foreground accent)
+      ;; Quotes: prose, not code
+      (set-face-attribute 'jd/org-quote-delimiter nil
+                          :background bg :box nil :extend t)
+      (dolist (face '(org-quote org-verse))
+        (when (facep face)
+          (set-face-attribute face nil
+                              :inherit 'variable-pitch :background 'unspecified
+                              :foreground 'unspecified :box nil :extend nil
+                              :slant 'italic))))))
+(advice-add 'load-theme :after #'jd/org-blocks-style-refresh)
 
 ;; CHECKED CHECKBOX FADE -----------------------
 ;; Text of a checked [X] item is drawn at reduced "opacity". Emacs has no real
@@ -313,7 +343,7 @@ succession, firing several fs-notify events per switch."
   "COLOR as a list of 0.0-1.0 floats, or nil. Parses #hex exactly (the
 display-based `color-name-to-rgb' snaps to a palette on terminals/daemons)."
   (when (stringp color)
-    (if-let ((vals (color-values-from-color-spec color)))
+    (if-let* ((vals (color-values-from-color-spec color)))
         (mapcar (lambda (v) (/ v 65535.0)) vals)
       (color-name-to-rgb color))))
 (advice-add 'load-theme :after #'jd/org-checkbox-fade-refresh)
@@ -435,7 +465,7 @@ display-based `color-name-to-rgb' snaps to a palette on terminals/daemons)."
   "i"   '(:ignore t :which-key "insert")
   "ii"  '(org-id-get-create :which-key "org ID")
 
-  ;; NOTES -- your second brain (org-roam). This is the Notion replacement.
+  ;; NOTES -- your second brain (org-roam).
   "n"   '(:ignore t :which-key "notes")
   "nf"  '(org-roam-node-find :which-key "find / create note")
   "ni"  '(org-roam-node-insert :which-key "link to note")
@@ -443,12 +473,11 @@ display-based `color-name-to-rgb' snaps to a palette on terminals/daemons)."
   "nl"  '(org-roam-buffer-toggle :which-key "backlinks panel")
   "nb"  '(consult-org-roam-backlinks :which-key "jump to backlink")
   "ns"  '(consult-org-roam-search :which-key "full-text search notes")
-  "nq"  '(jd/org-ql-search-all :which-key "query (like Notion filters)")
+  "nq"  '(jd/org-ql-search-all :which-key "query notes & tasks")
   "nr"  '(org-roam-refile :which-key "move heading into a note")
   "nt"  '(org-roam-tag-add :which-key "add tag")
   "na"  '(org-roam-alias-add :which-key "add alias")
   "nu"  '(org-roam-db-sync :which-key "re-index notes")
-  "nI"  '(jd/notion-import :which-key "import Notion export")
   "nd"  '(:ignore t :which-key "daily journal")
   "ndt" '(org-roam-dailies-goto-today :which-key "today")
   "ndc" '(org-roam-dailies-capture-today :which-key "write in today")
@@ -837,7 +866,29 @@ point is on that headline."
   (setq-local hl-line-range-function #'jd/org-hl-line-range)
   (diminish org-indent-mode))
 
-;; AUTOSAVE NOTES (like Notion) -----------------------
+;; KEEP NOTES INDENTED UNDER THEIR HEADINGS -----------------------
+;; org-roam sometimes opens a note in the background with org-mode's hooks
+;; suppressed; visiting it later reuses that buffer, so org-indent never
+;; turns on and body text and blocks sit at the far left (and wrapping,
+;; org-modern etc. are missing too). When such a buffer is shown, run the
+;; hooks org-roam held back, so it ends up exactly like a normally opened
+;; note. Buffers that were set up normally always have org-indent on, so
+;; they are never touched.
+(defun jd/org-ensure-indent (&optional frame)
+  "Finish setting up shown org buffers that skipped their mode hooks."
+  (dolist (win (window-list frame 'no-mini))
+    (with-current-buffer (window-buffer win)
+      (when (and buffer-file-name
+                 (derived-mode-p 'org-mode)
+                 (not (bound-and-true-p org-indent-mode)))
+        (if delayed-mode-hooks
+            (run-mode-hooks)          ; point and folding stay as they are
+          (org-indent-mode 1)
+          (when (fboundp 'org-modern-indent-mode)
+            (org-modern-indent-mode 1)))))))
+(add-hook 'window-buffer-change-functions #'jd/org-ensure-indent)
+
+;; AUTOSAVE NOTES -----------------------
 ;; Org buffers save themselves after 5 idle seconds, so you never lose a
 ;; thought. Limited to org files on purpose: code buffers still save only when
 ;; you say so (saving code triggers the prettier formatter).
@@ -1054,7 +1105,7 @@ point is on that headline."
 
   ;; Encrypt any heading tagged :crypt: with gpg on save (symmetric -- you
   ;; pick a passphrase). Decrypt with M-x org-decrypt-entry. For passwords,
-  ;; private journal entries, etc. -- things you'd have locked in Notion.
+  ;; private journal entries, etc..
   (require 'org-crypt)
   (setq org-crypt-key nil)
   (org-crypt-use-before-save-magic)
@@ -1147,7 +1198,18 @@ point is on that headline."
   (set-face-attribute 'org-special-keyword nil :inherit '(font-lock-comment-face fixed-pitch))
   (set-face-attribute 'org-meta-line nil :inherit '(font-lock-comment-face fixed-pitch))
   (set-face-attribute 'org-checkbox nil :inherit 'fixed-pitch)
-  (jd/org-block-padding-refresh)
+  (jd/org-blocks-style-refresh)
+
+  ;; Highlight the language on #+begin_src lines, and drop the code-card
+  ;; background from quote/verse delimiter lines (org gives every block's
+  ;; begin/end line the same face, so quotes need this override).
+  (font-lock-add-keywords
+   'org-mode
+   '(("^[ \t]*#\\+\\(?:begin\\|BEGIN\\)_\\(?:src\\|SRC\\)[ \t]+\\([^ \t\n]+\\)"
+      (1 'jd/org-src-lang prepend))
+     ("^[ \t]*#\\+\\(?:begin\\|BEGIN\\|end\\|END\\)_\\(?:quote\\|QUOTE\\|verse\\|VERSE\\)\\b.*\n?"
+      (0 'jd/org-quote-delimiter prepend)))
+   t)
 
   ;; The org-modern checked-box glyph (a checkmark inside a small box) doesn't
   ;; render legibly at normal text size in some fonts. Fade the item's text
@@ -1199,14 +1261,51 @@ point is on that headline."
   (org-modern-hide-stars nil)
   ;; valign handles table alignment instead -- the two aren't compatible together
   (org-modern-table nil)
-  (org-modern-todo-faces org-todo-keyword-faces))
+  ;; org-modern-indent draws block brackets instead. org-modern only skips its
+  ;; own fringe border when org-indent is already on, but org-modern-mode
+  ;; starts first -- so the border's line-prefix would overwrite the block's
+  ;; indentation whenever a new or edited block is re-highlighted.
+  (org-modern-block-fringe nil)
+  (org-modern-todo-faces org-todo-keyword-faces)
+  ;; Block delimiters: a code icon before the language, an opening quote
+  ;; mark for quotes, and blank #+end_ lines (they become bottom padding;
+  ;; org-modern-indent's ╰ still marks where the block ends).
+  (org-modern-block-name
+   `(("src"     "\uf121 " "")
+     ("quote"   ,(propertize "❝" 'face 'jd/org-quote-mark) "")
+     ("verse"   ,(propertize "❝" 'face 'jd/org-quote-mark) "")
+     ("example" "\uf15c example" "")
+     (t . t))))
 
 ;; org-modern hides its own source-block fringe styling once org-indent-mode
 ;; is on (which jd/org-mode-setup always enables) -- this restores it.
 (use-package org-modern-indent
   :straight (org-modern-indent :type git :host github :repo "jdtsmith/org-modern-indent")
   :after org
-  :hook (org-mode . org-modern-indent-mode))
+  :hook (org-mode . org-modern-indent-mode)
+  :config
+  ;; By default the ╭│╰ bracket takes the last column of the heading's
+  ;; indentation, so blocks start one column left of the body text. Give it
+  ;; one extra column so the bracket lines up with the paragraphs and the
+  ;; block's content sits just inside it.
+  ;; (The package writes `omi/' as shorthand for `org-modern-indent-'.)
+  ;; The package measures the indent from the line's current prefix -- which
+  ;; may be the bracket prefix it drew itself, or missing on a block you
+  ;; just typed. Compute it from the heading level instead (exactly what
+  ;; org-indent gives body text), so blocks land in the same place no
+  ;; matter when or how often they're redrawn.
+  (defun jd/omi-align-with-body (args)
+    "Draw block brackets in the body-text column of the enclosing heading."
+    (pcase-let ((`(,beg ,end ,beg0 ,end0 ,org-indent ,real-indent) args))
+      (let* ((level (save-excursion (goto-char beg) (or (org-current-level) 0)))
+             (body (if (and (> level 0) (boundp 'org-indent--text-line-prefixes)
+                            (< level (length org-indent--text-line-prefixes)))
+                       (length (aref org-indent--text-line-prefixes level))
+                     0)))
+        (if (and (> body 0) (= real-indent 0))
+            (list beg end beg0 end0 (1+ body) real-indent)
+          args))))
+  (advice-add 'org-modern-indent--draw-block :filter-args #'jd/omi-align-with-body))
 
 ;; Pixel-perfect table alignment under variable-pitch-mode, which
 ;; jd/org-mode-setup turns on for every org buffer.
@@ -1228,8 +1327,14 @@ point is on that headline."
                                      (header-line (:height 4.5) variable-pitch)
                                      (org-code (:height 1.5) org-code)
                                      (org-verbatim (:height 1.5) org-verbatim)
+                                     ;; Blocks scale with the slide text too
                                      (org-block (:height 1.5) org-block)
-                                     (org-block-begin-line (:height 0.7) org-block)))
+                                     (org-block-begin-line (:height 1.3) org-block-begin-line)
+                                     (org-block-end-line (:height 1.3) org-block-end-line)
+                                     (org-quote (:height 1.5) org-quote)
+                                     (org-verse (:height 1.5) org-verse)
+                                     (org-modern-block-name (:height 1.3) org-modern-block-name)
+                                     (org-modern-indent-bracket-line (:height 1.5) org-modern-indent-bracket-line)))
   (setq header-line-format " ")
   (org-display-inline-images)
   (jd/org-present-prepare-slide))
@@ -1257,10 +1362,10 @@ point is on that headline."
   :hook ((org-present-mode . jd/org-present-hook)
          (org-present-mode-quit . jd/org-present-quit-hook)))
 
-;; ORG ROAM (your notes -- the Notion replacement) -----------------------
+;; ORG ROAM (your notes) -----------------------
 ;; One small file per idea in ~/org/notes/, linked by stable IDs, so renaming
 ;; or moving a note never breaks a link. The backlinks panel (SPC n l) is
-;; Notion's "linked mentions", but it works across your whole archive.
+;; every note that links here, across your whole archive.
 (use-package org-roam
   :straight t
   :custom
@@ -1335,7 +1440,7 @@ point is on that headline."
    org-roam-node-find org-roam-node-insert
    :preview-key "M-."))
 
-;; QUERIES (Notion "database views", but over plain text) -----------------------
+;; QUERIES (saved views over plain text) -----------------------
 ;; org-ql searches every heading in ~/org by todo state, tag, property, date,
 ;; text... SPC n q prompts for a query, e.g.:
 ;;   todo:NEXT                       all next actions
@@ -1376,112 +1481,9 @@ point is on that headline."
 
 ;; TRANSCLUSION -----------------------
 ;; Embed a live copy of a heading/section from one org file inside another
-;; (like Notion's synced blocks), without duplicating the text.
+;; without duplicating the text.
 (use-package org-transclusion
   :after org)
-
-;; NOTION IMPORT -----------------------
-;; One-time migration: in Notion, Settings -> Export all workspace content ->
-;; Markdown & CSV (include subpages), unzip it, then SPC n I and pick the
-;; folder. Every page becomes an org-roam note in ~/org/notes/notion/ with
-;; its own ID; links between pages become real org-roam links (so backlinks
-;; work), images/attachments are copied to notes/notion/assets/, and
-;; database CSVs become org tables. Runs fully offline. Needs pandoc
-;; (`sudo pacman -S pandoc-cli').
-(require 'url-util)
-
-(defun jd/notion--clean-title (base)
-  "Strip the 32-char hex id Notion appends to exported file names in BASE."
-  (string-trim (replace-regexp-in-string "[ _-]*[0-9a-f]\\{32\\}\\'" "" base)))
-
-(defun jd/notion--replace-region (beg end text)
-  "Replace BEG..END with TEXT, leaving point after it."
-  (goto-char beg)
-  (delete-region beg end)
-  (insert text))
-
-(defun jd/notion--rewrite-links (src-dir export-dir assets-dir out-dir pages)
-  "Rewrite file links in the current (pandoc output) buffer.
-Links to other exported pages become id: links via PAGES; links to local
-files are copied under ASSETS-DIR and re-pointed relative to OUT-DIR.
-Relative links are resolved against SRC-DIR, inside EXPORT-DIR."
-  (goto-char (point-min))
-  (while (re-search-forward "\\[\\[\\([^]\n]+\\)\\]" nil t)
-    (let* ((beg (match-beginning 1))
-           (end (match-end 1))
-           (raw (match-string-no-properties 1))
-           (target (url-unhex-string (string-remove-prefix "file:" raw)))
-           (path (and (not (string-match-p "\\`[a-zA-Z][a-zA-Z0-9+.-]*:" target))
-                      (expand-file-name target src-dir)))
-           (page (and path (file-exists-p path)
-                      (gethash (file-truename path) pages))))
-      (cond
-       (page
-        (jd/notion--replace-region beg end (concat "id:" (car page))))
-       ((and path (file-regular-p path))
-        (let ((dest (expand-file-name (file-relative-name path export-dir) assets-dir)))
-          (make-directory (file-name-directory dest) t)
-          (copy-file path dest t)
-          (jd/notion--replace-region beg end (concat "file:" (file-relative-name dest out-dir)))))))))
-
-(defun jd/notion-import (export-dir)
-  "Convert an unzipped Notion Markdown & CSV export in EXPORT-DIR into org-roam notes."
-  (interactive "DUnzipped Notion export folder: ")
-  (unless (executable-find "pandoc")
-    (user-error "pandoc is required: sudo pacman -S pandoc-cli"))
-  (require 'org-roam)
-  (require 'org-id)
-  (let* ((export-dir (file-name-as-directory (expand-file-name export-dir)))
-         (out-dir (expand-file-name "notes/notion/" org-roam-directory))
-         (assets-dir (expand-file-name "assets/" out-dir))
-         (sources (directory-files-recursively export-dir "\\.\\(md\\|csv\\)\\'"))
-         (pages (make-hash-table :test #'equal)) ; source truename -> (id org-file title)
-         (taken (make-hash-table :test #'equal))
-         (coding-system-for-read 'utf-8)
-         (coding-system-for-write 'utf-8)
-         (count 0))
-    (unless sources
-      (user-error "No .md or .csv files under %s -- did you unzip the export?" export-dir))
-    (make-directory out-dir t)
-    ;; Pass 1: assign every page an ID and a unique output file, so pass 2
-    ;; can turn links between pages into id: links.
-    (dolist (src sources)
-      (let* ((title (jd/notion--clean-title (file-name-base src)))
-             (slug (org-roam-node-slug (org-roam-node-create :title title)))
-             (name slug)
-             (n 1))
-        (while (or (gethash name taken)
-                   (file-exists-p (expand-file-name (concat name ".org") out-dir)))
-          (setq n (1+ n)
-                name (format "%s-%d" slug n)))
-        (puthash name t taken)
-        (puthash (file-truename src)
-                 (list (org-id-new) (expand-file-name (concat name ".org") out-dir) title)
-                 pages)))
-    ;; Pass 2: convert.
-    (dolist (src sources)
-      (pcase-let ((`(,id ,org-file ,title) (gethash (file-truename src) pages))
-                  (csv (string-suffix-p ".csv" src)))
-        (with-temp-buffer
-          (let ((status (apply #'call-process "pandoc" nil t nil
-                               (append (if csv
-                                           '("-f" "csv")
-                                         ;; Notion puts the page title in a
-                                         ;; leading "# Title"; shifting levels
-                                         ;; turns it into metadata (dropped,
-                                         ;; since we write #+title ourselves).
-                                         '("-f" "gfm" "--shift-heading-level-by=-1"))
-                                       (list "-t" "org" "--wrap=none" src)))))
-            (unless (eq status 0)
-              (error "pandoc failed on %s: %s" src (buffer-string))))
-          (jd/notion--rewrite-links (file-name-directory src) export-dir assets-dir out-dir pages)
-          (goto-char (point-min))
-          (insert (format ":PROPERTIES:\n:ID:       %s\n:NOTION_SOURCE: %s\n:END:\n#+title: %s\n#+filetags: :notion:\n\n"
-                          id (file-relative-name src export-dir) title))
-          (write-region nil nil org-file nil 'silent)
-          (setq count (1+ count)))))
-    (org-roam-db-sync)
-    (message "Imported %d Notion pages into %s -- try SPC n f" count out-dir)))
 
 ;; DEVELOPMENT -----------------------
 ;; Git
