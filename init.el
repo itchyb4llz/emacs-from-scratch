@@ -946,7 +946,7 @@ point is on that headline."
         org-edit-src-content-indentation 2
         org-hide-block-startup nil
         org-src-preserve-indentation nil
-        org-startup-folded 'show3levels
+        org-startup-folded 'overview
         org-cycle-separator-lines 2
         org-startup-with-inline-images t
         org-image-actual-width '(600))
